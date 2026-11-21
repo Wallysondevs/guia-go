@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tipos básicos em Go — int, float64, string, bool, rune e byte | Guia Go</title>
+<meta name="description" content="Os tipos básicos do Go: inteiros com e sem sinal, float64, string, bool, rune e byte, com seus limites e o %T para ver o tipo.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Tipos</span> básicos</h1>
+
+<p class="intro">Todo valor em Go tem um tipo, e o tipo diz o que dá para fazer com ele. Nesta aula você conhece os tipos básicos, vê o tipo de cada valor com <code>%T</code>, os limites dos inteiros e duas surpresas: a divisão inteira e o <code>0.1 + 0.2</code>.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Os tipos do dia a dia: <code>int</code>, <code>float64</code>, <code>string</code>, <code>bool</code>.</li><li><code>rune</code> (um caractere Unicode) e <code>byte</code> (um byte).</li><li>Os tamanhos dos inteiros, a divisão inteira, o resto (<code>%</code>) e o estouro.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Os tipos e o <code>%T</code></h2>
+<p>O verbo <code>%T</code> do <code>Printf</code> escreve o tipo do valor; <code>%v</code> escreve o valor (aula <a href="fmt-printf.html">fmt.Printf</a>):</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var inteiro int = 42
+	var real float64 = 3.75
+	var texto string = "Go"
+	var verdade bool = true
+	var letra rune = 'G'
+	var b byte = 'o'
+
+	fmt.Printf("%v é %T\n", inteiro, inteiro)
+	fmt.Printf("%v é %T\n", real, real)
+	fmt.Printf("%v é %T\n", texto, texto)
+	fmt.Printf("%v é %T\n", verdade, verdade)
+	fmt.Printf("%v é %T\n", letra, letra)
+	fmt.Printf("%v é %T\n", b, b)
+}</pre>
+<pre class="term" data-cwd="~/projetos/tipos">$ go run main.go
+42 é int
+3.75 é float64
+Go é string
+true é bool
+71 é int32
+111 é uint8</pre>
+<p>Repare: <code>rune</code> aparece como <code>int32</code> e <code>byte</code> como <code>uint8</code>. São <strong>apelidos</strong>: um caractere é guardado como o número dele na tabela Unicode (o <code>G</code> é 71, o <code>o</code> é 111).</p>
+<div class="table-wrap"><table class="ref">
+<tr><th>Tipo</th><th>Guarda</th><th>Exemplo</th></tr>
+<tr><td><code>int</code></td><td>inteiro (64 bits nos computadores atuais)</td><td><code>42</code>, <code>-7</code></td></tr>
+<tr><td><code>float64</code></td><td>número com vírgula</td><td><code>3.75</code></td></tr>
+<tr><td><code>string</code></td><td>texto</td><td><code>"Go"</code></td></tr>
+<tr><td><code>bool</code></td><td>verdadeiro ou falso</td><td><code>true</code>, <code>false</code></td></tr>
+<tr><td><code>rune</code></td><td>um caractere Unicode (apelido de <code>int32</code>)</td><td><code>'G'</code>, <code>'ç'</code></td></tr>
+<tr><td><code>byte</code></td><td>um byte (apelido de <code>uint8</code>)</td><td><code>'o'</code>, <code>255</code></td></tr>
+</table></div>
+<hr>
+<h2>2. Tamanhos, divisão e resto</h2>
+<p>Existem inteiros de 8, 16, 32 e 64 bits, com sinal (<code>int8</code>…<code>int64</code>) e sem sinal (<code>uint8</code>…<code>uint64</code>). O pacote <code>math</code> tem os limites:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"math"
+)
+
+func main() {
+	fmt.Println("int8:", math.MinInt8, "a", math.MaxInt8)
+	fmt.Println("uint8:", 0, "a", math.MaxUint8)
+	fmt.Println("int32:", math.MinInt32, "a", math.MaxInt32)
+	fmt.Println("int64 máx:", math.MaxInt64)
+	fmt.Println("7 / 2 =", 7/2, "  7 % 2 =", 7%2)
+	fmt.Println("7.0 / 2 =", 7.0/2)
+	a, b := 0.1, 0.2
+	fmt.Println("0.1 + 0.2 =", a+b)
+}</pre>
+<pre class="term" data-cwd="~/projetos/limites">$ go run main.go
+int8: -128 a 127
+uint8: 0 a 255
+int32: -2147483648 a 2147483647
+int64 máx: 9223372036854775807
+7 / 2 = 3   7 % 2 = 1
+7.0 / 2 = 3.5
+0.1 + 0.2 = 0.30000000000000004</pre>
+<p>Três coisas para guardar: <strong>inteiro dividido por inteiro dá inteiro</strong> (<code>7/2</code> é <code>3</code>); o <code>%</code> dá o resto; e números com vírgula são aproximados no computador, por isso <code>0.1 + 0.2</code>, com os valores guardados em variáveis <code>float64</code>, não dá exatamente <code>0.3</code>. (Se você escrever a conta direto com números, <code>0.1+0.2</code>, o compilador faz a conta exata antes e escreve <code>0.3</code>.) Para dinheiro, guarde centavos em <code>int</code>.</p>
+<hr>
+<h2>3. Estouro</h2>
+<p>Quando a conta passa do limite do tipo, o valor “dá a volta”. Um <code>int8</code> vai até 127; somando 1, vira -128:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var pequeno int8 = 127
+	pequeno++
+	fmt.Println("127 + 1 em int8 =", pequeno)
+}</pre>
+<pre class="term" data-cwd="~/projetos/estouro">$ go run main.go
+127 + 1 em int8 = -128</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Valor que não cabe no tipo</strong>
+<p>Se o compilador <em>já sabe</em> que o valor não cabe, ele recusa:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var pequeno int8 = 200
+	fmt.Println(pequeno)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-estouro">$ go run main.go
+# command-line-arguments
+./main.go:6:21: cannot use 200 (untyped int constant) as int8 value in variable declaration (overflows)</pre></div>
+<div class="cenario"><strong>Misturar <code>int</code> com <code>float64</code></strong>
+<p>Go não converte sozinho entre tipos numéricos:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var a int = 10
+	var b float64 = 2.5
+	fmt.Println(a * b)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-mistura">$ go run main.go
+# command-line-arguments
+./main.go:8:14: invalid operation: a * b (mismatched types int and float64)</pre>
+<p>A solução, <code>float64(a) * b</code>, está na aula <a href="conversao.html">Conversão de Tipos</a>.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>int</code>, <code>float64</code></td><td>Inteiro e número com vírgula do dia a dia.</td></tr>
+<tr><td><code>string</code>, <code>bool</code></td><td>Texto e verdadeiro/falso.</td></tr>
+<tr><td><code>rune</code> = <code>int32</code></td><td>Um caractere Unicode.</td></tr>
+<tr><td><code>byte</code> = <code>uint8</code></td><td>Um byte.</td></tr>
+<tr><td><code>fmt.Printf("%T", x)</code></td><td>Mostra o tipo de <code>x</code>.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. O tipo de texto</h3><p>Complete:</p><div class="ex-code">var nome <input data-answer="string" aria-label="resposta"> = "Ana"</div></div>
+
+<div class="exercise"><h3>2. Divisão inteira</h3><p>Quanto o Go calcula para <code>9 / 2</code> (dois inteiros)?</p><div class="ex-code"><input data-answer="4" aria-label="resposta"></div></div>
+
+<div class="exercise"><h3>3. Resto</h3><p>E para <code>9 % 2</code>?</p><div class="ex-code"><input data-answer="1" aria-label="resposta"></div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. O <code>%T</code> de <code>'G'</code> (aspas simples) aparece como:</p>
+<label><input type="radio" name="q4"> <code>string</code></label>
+<label><input type="radio" name="q4"> <code>int32</code>, porque <code>rune</code> é apelido de <code>int32</code></label>
+<label><input type="radio" name="q4"> <code>byte</code></label>
+<label><input type="radio" name="q4"> <code>char</code></label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. Por que <code>0.1 + 0.2</code> não deu <code>0.3</code>?</p>
+<label><input type="radio" name="q5"> Bug do Go</label>
+<label><input type="radio" name="q5"> Números com vírgula são guardados de forma aproximada</label>
+<label><input type="radio" name="q5"> Porque faltou o <code>math</code></label>
+<label><input type="radio" name="q5"> Porque deu estouro</label></div>
+
+<div class="trycmd" data-goal="src:%T;;outre:^int$;;outre:^float64$;;outre:^bool$;;semerro">
+<p class="try-task"><strong>Missão:</strong> use <code>%T</code> para mostrar o tipo das três variáveis. A saída deve ter as linhas <code>int</code>, <code>float64</code> e <code>bool</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	idade := 30
+	altura := 1.65
+	estudante := true
+	fmt.Println(idade, altura, estudante)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	idade := 30
+	altura := 1.65
+	estudante := true
+	fmt.Printf("%T\n", idade)
+	fmt.Printf("%T\n", altura)
+	fmt.Printf("%T\n", estudante)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+int
+float64
+bool
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:a\s*/\s*b;;src:a\s*%\s*b;;out:17 / 5 = 3 resto 2;;semerro">
+<p class="try-task"><strong>Missão:</strong> mostre o quociente e o resto de 17 dividido por 5, com <code>/</code> e <code>%</code>. A saída deve ser <code>17 / 5 = 3 resto 2</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	a, b := 17, 5
+	fmt.Println(a, "/", b, "=")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	a, b := 17, 5
+	fmt.Println(a, "/", b, "=", a/b, "resto", a%b)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+17 / 5 = 3 resto 2
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Os básicos: <code>int</code>, <code>float64</code>, <code>string</code>, <code>bool</code>; <code>rune</code> e <code>byte</code> são apelidos de inteiros.</li>
+<li>Inteiro dividido por inteiro dá inteiro; <code>%</code> dá o resto.</li>
+<li>Inteiros têm limite e podem estourar; floats são aproximados.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

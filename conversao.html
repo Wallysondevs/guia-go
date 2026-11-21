@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversão de tipos em Go — float64(x), int(x) e strconv | Guia Go</title>
+<meta name="description" content="Como converter entre tipos em Go: números com T(x), e texto com strconv.Itoa, Atoi, ParseFloat e ParseBool, tratando o erro.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Conversão de <span class="hl">tipos</span></h1>
+
+<p class="intro">Go nunca converte tipos sozinho: somar <code>int</code> com <code>float64</code> não compila. Você pede a conversão de propósito. Entre números, com <code>T(valor)</code>; entre texto e número, com o pacote <code>strconv</code>, que devolve um erro quando o texto não é um número.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Converter números com <code>float64(x)</code>, <code>int(x)</code> e ver o que se perde.</li><li>Transformar número em texto com <code>strconv.Itoa</code> e texto em número com <code>strconv.Atoi</code> e <code>ParseFloat</code>.</li><li>Ler o erro de um texto que não é número.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Entre números: <code>T(valor)</code></h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	a := 10
+	b := 2.5
+	fmt.Println(float64(a) * b)
+	fmt.Println(int(b * 3))
+	negativo := -7.9
+	fmt.Println(int(negativo))
+
+	var grande int = 300
+	fmt.Println(uint8(grande))
+}</pre>
+<pre class="term" data-cwd="~/projetos/conversao">$ go run main.go
+25
+7
+-7
+44</pre>
+<p>Converter para <code>int</code> <strong>corta</strong> a parte depois da vírgula, sem arredondar: <code>int(negativo)</code>, com <code>negativo</code> valendo <code>-7.9</code>, dá <code>-7</code>. E converter para um tipo menor pode perder informação: 300 não cabe em <code>uint8</code> (vai até 255) e vira <code>44</code> (300 − 256).</p>
+<hr>
+<h2>2. Entre texto e número: <code>strconv</code></h2>
+<p><code>Itoa</code> é “integer to ASCII” (número para texto) e <code>Atoi</code> é o contrário. As funções que leem texto devolvem <strong>dois</strong> valores: o resultado e um erro, que é <code>&lt;nil&gt;</code> quando deu certo:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	idade := 30
+	texto := strconv.Itoa(idade)
+	fmt.Println("Idade: " + texto)
+
+	n, err := strconv.Atoi("42")
+	fmt.Println(n+1, err)
+
+	preco, err := strconv.ParseFloat("19.90", 64)
+	fmt.Println(preco*2, err)
+
+	ok, err := strconv.ParseBool("true")
+	fmt.Println(ok, err)
+
+	fmt.Println(fmt.Sprint("valor=", 3.5))
+}</pre>
+<pre class="term" data-cwd="~/projetos/strconv">$ go run main.go
+Idade: 30
+43 &lt;nil&gt;
+39.8 &lt;nil&gt;
+true &lt;nil&gt;
+valor=3.5</pre>
+<div class="warning"><strong>Cuidado com <code>string(65)</code></strong><p><code>string(65)</code> não dá <code>"65"</code>: dá <code>"A"</code>, o caractere de número 65. Para número em texto, use <code>strconv.Itoa</code>. O <code>go vet</code> avisa desse engano.</p></div>
+<hr>
+<h2>3. Quando o texto não é número</h2>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	n, err := strconv.Atoi("doze")
+	fmt.Println(n, err)
+
+	_, err = strconv.Atoi("99999999999999999999")
+	fmt.Println(err)
+}</pre>
+<pre class="term" data-cwd="~/projetos/strconv-erro">$ go run main.go
+0 strconv.Atoi: parsing "doze": invalid syntax
+strconv.Atoi: parsing "99999999999999999999": value out of range</pre>
+<p>O erro diz a função, o texto e o motivo: <code>invalid syntax</code> (não é número) ou <code>value out of range</code> (número grande demais). A aula <a href="erros-error.html">Erros</a> mostra como reagir com <code>if err != nil</code>.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Atribuir sem converter</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	idade := 30
+	var texto string = idade
+	fmt.Println(texto)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-conv">$ go run main.go
+# command-line-arguments
+./main.go:7:21: cannot use idade (variable of type int) as string value in variable declaration</pre></div>
+<div class="cenario"><strong><code>string(n)</code> no lugar de <code>strconv.Itoa</code></strong>
+<p>Compila, mas faz outra coisa. O <code>go vet</code> pega:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	n := 65
+	fmt.Println(string(n))
+}</pre>
+<pre class="term" data-cwd="~/projetos/string65">$ go vet main.go
+main.go:7:14: conversion from int to string yields a string of one rune, not a string of digits</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>float64(x)</code>, <code>int(x)</code></td><td>Converte entre números (int corta a fração).</td></tr>
+<tr><td><code>strconv.Itoa(n)</code></td><td>int → string.</td></tr>
+<tr><td><code>n, err := strconv.Atoi("42")</code></td><td>string → int, com erro.</td></tr>
+<tr><td><code>strconv.ParseFloat(s, 64)</code></td><td>string → float64.</td></tr>
+<tr><td><code>fmt.Sprint(…)</code></td><td>Qualquer valor → string.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Para float</h3><p>Complete para multiplicar <code>a</code> (int) por <code>b</code> (float64):</p><div class="ex-code"><input data-answer="float64" aria-label="resposta">(a) * b</div></div>
+
+<div class="exercise"><h3>2. Número para texto</h3><p>Complete:</p><div class="ex-code">texto := strconv.<input data-answer="Itoa" aria-label="resposta">(30)</div></div>
+
+<div class="exercise"><h3>3. Texto para número</h3><p>Complete:</p><div class="ex-code">n, err := strconv.<input data-answer="Atoi" aria-label="resposta">("42")</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Quanto vale <code>int(3.99)</code>?</p>
+<label><input type="radio" name="q4"> 4</label>
+<label><input type="radio" name="q4"> 3</label>
+<label><input type="radio" name="q4"> 3.99</label>
+<label><input type="radio" name="q4"> Não compila</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. O que <code>strconv.Atoi("doze")</code> devolve?</p>
+<label><input type="radio" name="q5"> 12 e nil</label>
+<label><input type="radio" name="q5"> 0 e um erro <code>invalid syntax</code></label>
+<label><input type="radio" name="q5"> Para o programa com panic</label>
+<label><input type="radio" name="q5"> "doze"</label></div>
+
+<div class="trycmd" data-goal="src:strconv\.Atoi\(;;out:total: 15;;semerro">
+<p class="try-task"><strong>Missão:</strong> o programa recebe a quantidade como texto. Converta com <code>strconv.Atoi</code> e escreva o total (quantidade × 3). A saída deve ser <code>total: 15</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	quantidade := "5"
+	// converta e calcule aqui
+	fmt.Println("total:")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	quantidade := "5"
+	n, err := strconv.Atoi(quantidade)
+	if err != nil {
+		fmt.Println("erro:", err)
+		return
+	}
+	fmt.Println("total:", n*3)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+total: 15
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:float64\(;;out:média: 7.5;;semerro">
+<p class="try-task"><strong>Missão:</strong> calcule a média de 7 e 8 como <code>float64</code>. Sem converter, <code>(a + b) / 2</code> dá 7. Converta para que a saída seja <code>média: 7.5</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	a, b := 7, 8
+	media := (a + b) / 2
+	fmt.Println("média:", media)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	a, b := 7, 8
+	media := float64(a+b) / 2
+	fmt.Println("média:", media)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+média: 7.5
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Go não converte sozinho; use <code>T(valor)</code> entre números.</li>
+<li><code>int(x)</code> corta a fração; tipos menores podem perder informação.</li>
+<li>Texto ↔ número com <code>strconv</code>, que devolve um erro quando o texto não serve.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

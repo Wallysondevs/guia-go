@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Variáveis em Go — var, := e valor zero | Guia Go</title>
+<meta name="description" content="Como criar variáveis em Go com var e com a declaração curta :=, o valor zero de cada tipo e a troca de valores.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Variáveis (<span class="hl">var</span> e <span class="hl">:=</span>)</h1>
+
+<p class="intro">Uma variável é uma <strong>caixa com nome</strong> onde o programa guarda um valor. Em Go toda caixa tem um <strong>tipo</strong> fixo: uma caixa de <code>int</code> só guarda números inteiros. Nesta aula você cria variáveis com <code>var</code> e com <code>:=</code> e descobre o “valor zero”.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Declarar com <code>var nome tipo = valor</code>, deixar o Go deduzir o tipo, e usar <code>:=</code>.</li><li>O valor zero: toda variável começa com um valor, nunca com lixo.</li><li>Atribuir com <code>=</code>, declarar várias de uma vez e trocar dois valores.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Três jeitos de declarar</h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var nome string = "Ana"
+	var idade int = 30
+	var cidade = "Recife" // o Go deduz o tipo: string
+	pais := "Brasil"      // declaração curta, só dentro de funções
+	fmt.Println(nome, idade, cidade, pais)
+
+	idade = 31 // muda o valor: sem var, sem :=
+	fmt.Println("ano que vem:", idade)
+}</pre>
+<pre class="term" data-cwd="~/projetos/variaveis">$ go run main.go
+Ana 30 Recife Brasil
+ano que vem: 31</pre>
+<dl class="anatomy"><dt>var</dt><dd>“vou criar uma variável”.</dd><dt>nome</dt><dd>o nome da caixa.</dd><dt>string</dt><dd>o tipo: texto.</dd><dt>= "Ana"</dt><dd>o valor inicial.</dd></dl>
+<p>Quando há valor inicial, o tipo pode sair: <code>var cidade = "Recife"</code> vira <code>string</code> sozinho. A forma curta <code>pais := "Brasil"</code> faz o mesmo sem o <code>var</code> e é a mais usada <strong>dentro de funções</strong>. Para mudar o valor depois, use só <code>=</code>.</p>
+<hr>
+<h2>2. O valor zero</h2>
+<p>Variável declarada sem valor não fica “vazia” nem com lixo: ganha o <strong>valor zero</strong> do tipo. <code>0</code> para números, <code>false</code> para <code>bool</code> e <code>""</code> (texto vazio) para <code>string</code>. O <code>%q</code> mostra o texto entre aspas, para dar para ver que ele está vazio:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var contador int
+	var preco float64
+	var ativo bool
+	var apelido string
+	fmt.Println(contador, preco, ativo)
+	fmt.Printf("apelido: %q\n", apelido)
+
+	x, y := 10, 20
+	x, y = y, x // troca os valores numa linha só
+	fmt.Println("x =", x, "y =", y)
+}</pre>
+<pre class="term" data-cwd="~/projetos/zero">$ go run main.go
+0 0 false
+apelido: ""
+x = 20 y = 10</pre>
+<div class="table-wrap"><table class="ref">
+<tr><th>Tipo</th><th>Valor zero</th></tr>
+<tr><td><code>int</code>, <code>float64</code></td><td><code>0</code></td></tr>
+<tr><td><code>bool</code></td><td><code>false</code></td></tr>
+<tr><td><code>string</code></td><td><code>""</code></td></tr>
+<tr><td>ponteiros, slices, maps</td><td><code>nil</code> (Nível 2)</td></tr>
+</table></div>
+<hr>
+<h2>3. Nomes</h2>
+<p>Nomes começam com letra (ou <code>_</code>) e podem ter números. O costume em Go é <strong>camelCase</strong>: <code>precoTotal</code>, <code>nomeCompleto</code>. Maiúscula no começo tem significado especial (exportar, no Nível 2), então variáveis locais começam com minúscula.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong><code>:=</code> duas vezes na mesma variável</strong>
+<p>O <code>:=</code> <em>cria</em>. Para mudar o valor de uma variável que já existe, use <code>=</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	idade := 30
+	idade := 31
+	fmt.Println(idade)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-redecl">$ go run main.go
+# command-line-arguments
+./main.go:7:8: no new variables on left side of :=</pre></div>
+<div class="cenario"><strong>Valor do tipo errado</strong>
+<p>Uma caixa de <code>int</code> não aceita texto:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var idade int = 30
+	idade = "trinta"
+	fmt.Println(idade)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-tipo">$ go run main.go
+# command-line-arguments
+./main.go:7:10: cannot use "trinta" (untyped string constant) as int value in assignment</pre></div>
+<div class="cenario"><strong><code>:=</code> fora de função</strong>
+<p>Fora de funções, só vale <code>var</code>. A forma curta ali é erro de sintaxe:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+total := 10
+
+func main() {
+	fmt.Println(total)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-fora">$ go run main.go
+# command-line-arguments
+./main.go:5:1: syntax error: non-declaration statement outside function body</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>var x int = 5</code></td><td>Declara com tipo e valor.</td></tr>
+<tr><td><code>var x = 5</code></td><td>O Go deduz o tipo.</td></tr>
+<tr><td><code>x := 5</code></td><td>Declaração curta (só dentro de funções).</td></tr>
+<tr><td><code>x = 6</code></td><td>Muda o valor de uma variável existente.</td></tr>
+<tr><td><code>a, b = b, a</code></td><td>Troca dois valores.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Declaração curta</h3><p>Crie <code>cor</code> com o valor <code>"azul"</code> do jeito curto:</p><div class="ex-code">cor <input data-answer=":=" aria-label="resposta"> "azul"</div></div>
+
+<div class="exercise"><h3>2. Com var</h3><p>Complete com o tipo de texto:</p><div class="ex-code">var nome <input data-answer="string" aria-label="resposta"> = "Ana"</div></div>
+
+<div class="exercise"><h3>3. Valor zero</h3><p>Qual o valor zero de um <code>bool</code>?</p><div class="ex-code"><input data-answer="false" aria-label="resposta"></div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Qual a diferença entre <code>:=</code> e <code>=</code>?</p>
+<label><input type="radio" name="q4"> Nenhuma</label>
+<label><input type="radio" name="q4"> <code>:=</code> cria uma variável nova; <code>=</code> muda o valor de uma que já existe</label>
+<label><input type="radio" name="q4"> <code>=</code> só funciona fora de funções</label>
+<label><input type="radio" name="q4"> <code>:=</code> compara dois valores</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. O que <code>var total int</code> guarda antes de receber valor?</p>
+<label><input type="radio" name="q5"> Lixo da memória</label>
+<label><input type="radio" name="q5"> <code>0</code>, o valor zero de <code>int</code></label>
+<label><input type="radio" name="q5"> <code>nil</code></label>
+<label><input type="radio" name="q5"> Nada: dá erro ao usar</label></div>
+
+<div class="trycmd" data-goal="src:linguagem\s*:=\s*&quot;Go&quot;;;src:var ano;;out:Go nasceu em 2009;;semerro">
+<p class="try-task"><strong>Missão:</strong> crie a variável <code>linguagem</code> com <code>:=</code> e o valor <code>"Go"</code>, e a variável <code>ano</code> com <code>var</code> e o valor <code>2009</code>. O programa deve escrever <code>Go nasceu em 2009</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	// crie as variáveis aqui
+	fmt.Println(linguagem, "nasceu em", ano)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	linguagem := "Go"
+	var ano int = 2009
+	fmt.Println(linguagem, "nasceu em", ano)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Go nasceu em 2009
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:a, b = b, a;;out:a = 2 b = 1;;semerro">
+<p class="try-task"><strong>Missão:</strong> troque os valores de <code>a</code> e <code>b</code> numa linha só (<code>a, b = b, a</code>), para o programa escrever <code>a = 2 b = 1</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	a, b := 1, 2
+	// troque aqui
+	fmt.Println("a =", a, "b =", b)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	a, b := 1, 2
+	a, b = b, a
+	fmt.Println("a =", a, "b =", b)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+a = 2 b = 1
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>var x tipo = valor</code>, <code>var x = valor</code> ou <code>x := valor</code> (só em funções).</li>
+<li>Variável sem valor começa com o valor zero do tipo.</li>
+<li><code>:=</code> cria; <code>=</code> muda.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

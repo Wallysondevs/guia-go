@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fmt.Printf em Go — verbos %d, %s, %v, %.2f, largura e Sprintf | Guia Go</title>
+<meta name="description" content="Formatando texto em Go com fmt.Printf e fmt.Sprintf: verbos %d, %s, %f, %v, %T, %q, largura, alinhamento e casas decimais.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Formatando com <span class="hl">fmt.Printf</span></h1>
+
+<p class="intro">O <code>Println</code> escreve valores um depois do outro. O <code>Printf</code> deixa você montar a frase com <strong>buracos</strong> (os <em>verbos</em>, como <code>%d</code> e <code>%s</code>) e escolher casas decimais, largura e alinhamento. O <code>Sprintf</code> faz o mesmo, mas devolve o texto em vez de escrever.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Os verbos mais usados: <code>%d</code>, <code>%s</code>, <code>%f</code>, <code>%v</code>, <code>%T</code>, <code>%q</code>, <code>%t</code>.</li><li>Casas decimais (<code>%.2f</code>), largura (<code>%8s</code>), alinhamento à esquerda (<code>%-8s</code>) e zeros (<code>%05d</code>).</li><li>Montar texto com <code>fmt.Sprintf</code> e mostrar structs com <code>%+v</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Os verbos</h2>
+<p>Cada <code>%</code> na frase é trocado pelo próximo valor da lista. O <code>Printf</code> <strong>não</strong> pula linha sozinho: ponha <code>\n</code> no fim.</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	nome := "Ana"
+	idade := 30
+	altura := 1.6543
+	fmt.Printf("%s tem %d anos e %.2f m\n", nome, idade, altura)
+	fmt.Printf("%v | %+v | %T\n", idade, idade, altura)
+	fmt.Printf("%q\n", nome)
+	fmt.Printf("%t\n", idade &gt; 18)
+	fmt.Printf("%x %o %b\n", 255, 8, 5)
+	fmt.Printf("%c %U\n", 'ç', 'ç')
+	fmt.Printf("100%%\n")
+}</pre>
+<pre class="term" data-cwd="~/projetos/printf">$ go run main.go
+Ana tem 30 anos e 1.65 m
+30 | 30 | float64
+"Ana"
+true
+ff 10 101
+ç U+00E7
+100%</pre>
+<div class="table-wrap"><table class="ref">
+<tr><th>Verbo</th><th>Escreve</th></tr>
+<tr><td><code>%d</code></td><td>inteiro em decimal</td></tr>
+<tr><td><code>%s</code> / <code>%q</code></td><td>texto / texto entre aspas</td></tr>
+<tr><td><code>%f</code>, <code>%.2f</code></td><td>número com vírgula (2 casas)</td></tr>
+<tr><td><code>%v</code> / <code>%T</code></td><td>qualquer valor, no formato padrão / o tipo</td></tr>
+<tr><td><code>%t</code></td><td>bool</td></tr>
+<tr><td><code>%x</code>, <code>%o</code>, <code>%b</code></td><td>hexadecimal, octal, binário</td></tr>
+<tr><td><code>%c</code>, <code>%U</code></td><td>o caractere, o código Unicode</td></tr>
+<tr><td><code>%%</code></td><td>o próprio <code>%</code></td></tr>
+</table></div>
+<hr>
+<h2>2. Largura e alinhamento</h2>
+<p>Um número entre o <code>%</code> e a letra é a <strong>largura</strong> mínima. Com <code>-</code>, o texto encosta na esquerda; com <code>0</code>, os números ganham zeros. Isso monta tabelas alinhadas:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Printf("[%8s]\n", "Go")
+	fmt.Printf("[%-8s]\n", "Go")
+	fmt.Printf("[%5d]\n", 42)
+	fmt.Printf("[%05d]\n", 42)
+	fmt.Printf("[%8.3f]\n", 3.14159)
+
+	fmt.Printf("%-10s %6s\n", "produto", "preço")
+	fmt.Printf("%-10s %6.2f\n", "café", 4.5)
+	fmt.Printf("%-10s %6.2f\n", "pão", 0.75)
+}</pre>
+<pre class="term" data-cwd="~/projetos/largura">$ go run main.go
+[      Go]
+[Go      ]
+[   42]
+[00042]
+[   3.142]
+produto     preço
+café         4.50
+pão          0.75</pre>
+<p>Repare que <code>pão</code> e <code>café</code> ficaram alinhados mesmo com acento: a largura do <code>Printf</code> conta caracteres (runes), não bytes.</p>
+<hr>
+<h2>3. <code>Sprintf</code> e structs</h2>
+<p>O <code>Sprintf</code> devolve o texto pronto, para guardar numa variável. E para structs (aula <a href="structs-e-metodos.html">Structs</a>), <code>%+v</code> mostra o nome dos campos e <code>%#v</code> mostra como se escreve em Go:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	msg := fmt.Sprintf("%s tem %d anos", "Ana", 30)
+	fmt.Println(msg)
+	fmt.Println(len(msg))
+
+	type ponto struct{ X, Y int }
+	p := ponto{1, 2}
+	fmt.Printf("%v\n%+v\n%#v\n", p, p, p)
+}</pre>
+<pre class="term" data-cwd="~/projetos/sprintf">$ go run main.go
+Ana tem 30 anos
+15
+{1 2}
+{X:1 Y:2}
+main.ponto{X:1, Y:2}</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Verbo e valor que não combinam</strong>
+<p>Aqui falta um valor, um verbo pede número e recebe texto, e sobra um valor. O programa compila e roda, e o <code>Printf</code> marca os problemas na própria saída com <code>%!</code>. Já o <code>go vet</code> pega os três antes de rodar:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Printf("%s tem %d anos\n", "Ana")
+	fmt.Printf("%d\n", "trinta")
+	fmt.Printf("oi\n", 1)
+}</pre>
+<pre class="term" data-cwd="~/projetos/printf-erro">$ go run main.go
+Ana tem %!d(MISSING) anos
+%!d(string=trinta)
+oi
+%!(EXTRA int=1)
+$ go vet main.go
+main.go:6:21: fmt.Printf format %d reads arg #2, but call has 1 arg
+main.go:7:14: fmt.Printf format %d has arg "trinta" of wrong type string
+main.go:8:21: fmt.Printf call has arguments but no formatting directives</pre>
+<p>Leia <code>%!d(MISSING)</code> como “faltou o valor do <code>%d</code>”, <code>%!d(string=trinta)</code> como “o <code>%d</code> recebeu uma string” e <code>%!(EXTRA int=1)</code> como “sobrou um valor”.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>fmt.Printf("%s %d\n", s, n)</code></td><td>Escreve formatado (sem pular linha sozinho).</td></tr>
+<tr><td><code>fmt.Sprintf(…)</code></td><td>Devolve o texto formatado.</td></tr>
+<tr><td><code>%.2f</code></td><td>Duas casas decimais.</td></tr>
+<tr><td><code>%-10s</code> / <code>%6d</code></td><td>Largura 10 à esquerda / largura 6 à direita.</td></tr>
+<tr><td><code>%v</code>, <code>%+v</code>, <code>%T</code></td><td>Valor, valor com campos, tipo.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Inteiro</h3><p>Complete o verbo para um inteiro:</p><div class="ex-code">fmt.Printf("idade: <input data-answer="%d" aria-label="resposta">\n", 30)</div></div>
+
+<div class="exercise"><h3>2. Duas casas</h3><p>Complete para mostrar <code>4.50</code>:</p><div class="ex-code">fmt.Printf("<input data-answer="%.2f" aria-label="resposta">\n", 4.5)</div></div>
+
+<div class="exercise"><h3>3. Devolver texto</h3><p>Complete para guardar o texto numa variável:</p><div class="ex-code">msg := fmt.<input data-answer="Sprintf" aria-label="resposta">("%s!", "Oi")</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. O que <code>%v</code> faz?</p>
+<label><input type="radio" name="q4"> Só escreve inteiros</label>
+<label><input type="radio" name="q4"> Escreve qualquer valor no formato padrão</label>
+<label><input type="radio" name="q4"> Escreve o tipo</label>
+<label><input type="radio" name="q4"> Escreve em verde</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. Por que o <code>Printf</code> abaixo escreve tudo na mesma linha? <code>fmt.Printf("a"); fmt.Printf("b")</code></p>
+<label><input type="radio" name="q5"> Bug</label>
+<label><input type="radio" name="q5"> Porque o <code>Printf</code> não pula linha sozinho: falta <code>\n</code></label>
+<label><input type="radio" name="q5"> Porque falta o <code>%s</code></label>
+<label><input type="radio" name="q5"> Porque <code>Printf</code> só escreve uma vez</label></div>
+
+<div class="trycmd" data-goal="src:Printf;;src:%\.2f;;out:café custa R$ 4.50;;semerro">
+<p class="try-task"><strong>Missão:</strong> use <code>Printf</code> com <code>%s</code> e <code>%.2f</code> para escrever <code>café custa R$ 4.50</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	produto := "café"
+	preco := 4.5
+	fmt.Println(produto, preco)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	produto := "café"
+	preco := 4.5
+	fmt.Printf("%s custa R$ %.2f\n", produto, preco)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+café custa R$ 4.50
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:fmt\.Sprintf\(;;out:Ana tem 30 anos;;semerro">
+<p class="try-task"><strong>Missão:</strong> use <code>fmt.Sprintf</code> para montar a frase <code>Ana tem 30 anos</code> numa variável <code>msg</code> e escreva <code>msg</code> com <code>Println</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	nome, idade := "Ana", 30
+	msg := ""
+	fmt.Println(msg)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	nome, idade := "Ana", 30
+	msg := fmt.Sprintf("%s tem %d anos", nome, idade)
+	fmt.Println(msg)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Ana tem 30 anos
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>Printf</code> troca cada verbo pelo próximo valor; ponha <code>\n</code> no fim.</li>
+<li><code>%d</code>, <code>%s</code>, <code>%.2f</code>, <code>%v</code>, <code>%T</code>, <code>%q</code> são os mais usados.</li>
+<li>Largura e <code>-</code> alinham colunas; <code>Sprintf</code> devolve o texto.</li>
+<li>Verbos errados aparecem como <code>%!</code>; o <code>go vet</code> avisa antes.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

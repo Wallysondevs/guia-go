@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Constantes em Go — const, grupos e iota | Guia Go</title>
+<meta name="description" content="Como declarar constantes em Go com const, agrupar em blocos e numerar com iota.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Constantes (<span class="hl">const</span> e <span class="hl">iota</span>)</h1>
+
+<p class="intro">Uma constante é um valor que <strong>nunca muda</strong> enquanto o programa roda: o número pi, os dias da semana, um limite. Em Go ela é declarada com <code>const</code> e conferida pelo compilador. Nesta aula você também conhece o <code>iota</code>, um contador automático para listas de constantes.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Declarar constantes com <code>const</code>, dentro e fora de funções.</li><li>Agrupar constantes num bloco <code>const ( … )</code>.</li><li>Numerar com <code>iota</code> e pular valores com <code>_</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. <code>const</code></h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+const pi = 3.14159
+const saudacao = "Bem-vinda"
+
+func main() {
+	const diasNaSemana = 7
+	raio := 2.0
+	fmt.Println(saudacao, "à aula de constantes!")
+	fmt.Println("área do círculo:", pi*raio*raio)
+	fmt.Println("dias:", diasNaSemana, "horas:", diasNaSemana*24)
+}</pre>
+<pre class="term" data-cwd="~/projetos/constantes">$ go run main.go
+Bem-vinda à aula de constantes!
+área do círculo: 12.56636
+dias: 7 horas: 168</pre>
+<p>Constantes podem ficar fora de funções (valem no arquivo todo) ou dentro (valem só ali). Elas aceitam contas, como <code>diasNaSemana*24</code>, que o compilador faz antes de o programa rodar.</p>
+<hr>
+<h2>2. <code>iota</code>: o contador automático</h2>
+<p>Dentro de um bloco <code>const ( … )</code>, o <code>iota</code> vale 0 na primeira linha, 1 na segunda, 2 na terceira… E as linhas sem valor repetem a expressão de cima. Com isso, numerar os dias da semana ou calcular potências fica numa linha só:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+const (
+	Domingo = iota
+	Segunda
+	Terca
+	Quarta
+)
+
+const (
+	_  = iota
+	KB = 1 &lt;&lt; (10 * iota)
+	MB
+	GB
+)
+
+func main() {
+	fmt.Println(Domingo, Segunda, Terca, Quarta)
+	fmt.Println("KB:", KB, "MB:", MB, "GB:", GB)
+}</pre>
+<pre class="term" data-cwd="~/projetos/iota">$ go run main.go
+0 1 2 3
+KB: 1024 MB: 1048576 GB: 1073741824</pre>
+<dl class="anatomy"><dt>_ = iota</dt><dd>joga fora o 0 (o <code>_</code> é o “nome em branco”).</dd><dt>KB = 1 &lt;&lt; (10 * iota)</dt><dd>1 deslocado 10 bits para a esquerda: 1024.</dd><dt>MB</dt><dd>repete a expressão com <code>iota</code> = 2: 1024 × 1024.</dd></dl>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Tentar mudar uma constante</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	const limite = 10
+	limite = 20
+	fmt.Println(limite)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-const">$ go run main.go
+# command-line-arguments
+./main.go:7:2: cannot assign to limite (neither addressable nor a map index expression)</pre></div>
+<div class="cenario"><strong>Constante com valor que só existe com o programa rodando</strong>
+<p>O valor de uma constante precisa ser conhecido na compilação. O tamanho de uma <em>variável</em> não é:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	nome := "Ana"
+	const tamanho = len(nome)
+	fmt.Println(tamanho)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-const2">$ go run main.go
+# command-line-arguments
+./main.go:7:18: len(nome) (value of type int) is not constant</pre>
+<p>Aqui o certo é <code>tamanho := len(nome)</code>, uma variável.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>const pi = 3.14159</code></td><td>Uma constante.</td></tr>
+<tr><td><code>const ( A = 1; B = 2 )</code></td><td>Bloco de constantes.</td></tr>
+<tr><td><code>A = iota</code></td><td>Contador: 0, 1, 2… a cada linha do bloco.</td></tr>
+<tr><td><code>_ = iota</code></td><td>Pula um valor.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Declare</h3><p>Complete para criar a constante <code>limite</code>:</p><div class="ex-code"><input data-answer="const" aria-label="resposta"> limite = 100</div></div>
+
+<div class="exercise"><h3>2. O contador</h3><p>Complete para numerar a partir de zero:</p><div class="ex-code">const (
+    Pequeno = <input data-answer="iota" aria-label="resposta">
+    Medio
+    Grande
+)</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. O que acontece se o programa tentar mudar uma constante?</p>
+<label><input type="radio" name="q3"> Muda normalmente</label>
+<label><input type="radio" name="q3"> Não compila</label>
+<label><input type="radio" name="q3"> Dá erro só quando a linha rodar</label>
+<label><input type="radio" name="q3"> Vira variável</label></div>
+
+<div class="mc" data-answer="3"><p class="mc-q">4. No bloco <code>const ( A = iota; B; C )</code>, quanto vale <code>C</code>?</p>
+<label><input type="radio" name="q4"> 0</label>
+<label><input type="radio" name="q4"> 1</label>
+<label><input type="radio" name="q4"> 2</label>
+<label><input type="radio" name="q4"> 3</label></div>
+
+<div class="trycmd" data-goal="src:=\s*iota;;outre:^0 1 2$;;semerro">
+<p class="try-task"><strong>Missão:</strong> complete o bloco com <code>iota</code> para que <code>Ouro</code> valha 0, <code>Prata</code> 1 e <code>Bronze</code> 2. O programa deve escrever <code>0 1 2</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+const (
+	Ouro = 0
+	Prata = 0
+	Bronze = 0
+)
+
+func main() {
+	fmt.Println(Ouro, Prata, Bronze)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+const (
+	Ouro = iota
+	Prata
+	Bronze
+)
+
+func main() {
+	fmt.Println(Ouro, Prata, Bronze)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+0 1 2
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>const</code> cria valores que não mudam, conferidos na compilação.</li>
+<li>Blocos <code>const ( … )</code> agrupam constantes.</li>
+<li><code>iota</code> conta 0, 1, 2… e as linhas sem valor repetem a expressão.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

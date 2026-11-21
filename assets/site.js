@@ -18,11 +18,11 @@ var NIVEIS = [
       ["erros-de-compilacao.html", "Lendo Erros de Compilação"]
     ]},
     { grupo: "Tipos e Valores", itens: [
-      ["variaveis.html", "Variáveis (var e :=)", { pronta: false }],
-      ["constantes.html", "Constantes (const e iota)", { pronta: false }],
-      ["tipos-basicos.html", "Tipos Básicos", { pronta: false }],
-      ["conversao.html", "Conversão de Tipos", { pronta: false }],
-      ["fmt-printf.html", "Formatando com fmt.Printf", { pronta: false }]
+      ["variaveis.html", "Variáveis (var e :=)"],
+      ["constantes.html", "Constantes (const e iota)"],
+      ["tipos-basicos.html", "Tipos Básicos"],
+      ["conversao.html", "Conversão de Tipos"],
+      ["fmt-printf.html", "Formatando com fmt.Printf"]
     ]},
     { grupo: "Controle de Fluxo", itens: [
       ["if-else.html", "if e else", { pronta: false }],
