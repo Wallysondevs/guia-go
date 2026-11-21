@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>embed em Go — //go:embed para pôr arquivos dentro do executável | Guia Go</title>
+<meta name="description" content="Como usar //go:embed em Go para embutir arquivos de texto, bytes e pastas inteiras (embed.FS) dentro do executável.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Embutindo arquivos (<span class="hl">embed</span>)</h1>
+
+<p class="intro">Às vezes o programa precisa de um arquivo junto: um modelo de texto, uma página HTML, um arquivo de configuração. Com a diretiva <code>//go:embed</code>, o arquivo vai <strong>para dentro do executável</strong> na compilação. Você entrega um arquivo só, e ele continua funcionando mesmo se o original sumir.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Embutir um arquivo numa <code>string</code> ou num <code>[]byte</code> com <code>//go:embed</code>.</li><li>Embutir vários arquivos num <code>embed.FS</code> e ler como um sistema de arquivos.</li><li>Provar que o conteúdo foi para dentro do executável.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Um arquivo numa variável</h2>
+<p>A linha <code>//go:embed nome</code> fica <strong>logo acima</strong> de uma variável de pacote. O <code>import _ "embed"</code> é obrigatório quando você não usa nada do pacote pelo nome:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	_ "embed"
+	"fmt"
+	"strings"
+)
+
+//go:embed mensagem.txt
+var mensagem string
+
+//go:embed versao.txt
+var versao []byte
+
+func main() {
+	fmt.Print(mensagem)
+	fmt.Println("versão:", strings.TrimSpace(string(versao)))
+}</pre>
+<pre class="file" data-file="mensagem.txt">Bem-vinda à loja da Ana!
+Aberta de segunda a sábado.</pre>
+<pre class="file" data-file="versao.txt">1.4.2</pre>
+<pre class="term" data-cwd="~/projetos/embutir">$ go run .
+Bem-vinda à loja da Ana!
+Aberta de segunda a sábado.
+versão: 1.4.2
+$ go build -o embutir .
+$ rm mensagem.txt
+$ ./embutir
+Bem-vinda à loja da Ana!
+Aberta de segunda a sábado.
+versão: 1.4.2</pre>
+<p>Depois do <code>go build</code>, apagamos o <code>mensagem.txt</code> e o executável continuou mostrando o texto: ele está lá dentro.</p>
+<hr>
+<h2>2. Vários arquivos: <code>embed.FS</code></h2>
+<p>Com um padrão como <code>modelos/*.txt</code>, a variável é um <code>embed.FS</code>, um pequeno sistema de arquivos só de leitura:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"embed"
+	"fmt"
+	"io/fs"
+)
+
+//go:embed modelos/*.txt
+var modelos embed.FS
+
+func main() {
+	arquivos, _ := fs.Glob(modelos, "modelos/*.txt")
+	for _, nome := range arquivos {
+		dados, _ := modelos.ReadFile(nome)
+		fmt.Printf("%s: %s", nome, dados)
+	}
+}</pre>
+<pre class="file" data-file="modelos/oi.txt">Oi, {{nome}}!</pre>
+<pre class="file" data-file="modelos/tchau.txt">Até logo, {{nome}}.</pre>
+<pre class="term" data-cwd="~/projetos/modelos">$ go run .
+modelos/oi.txt: Oi, {{nome}}!
+modelos/tchau.txt: Até logo, {{nome}}.</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>O arquivo não existe</strong>
+<pre class="file" data-file="main.go">package main
+
+import (
+	_ "embed"
+	"fmt"
+)
+
+//go:embed config.json
+var config string
+
+func main() {
+	fmt.Println(config)
+}</pre>
+<pre class="term" data-cwd="~/projetos/embed-erro">$ go run .
+main.go:8:12: pattern config.json: no matching files found</pre></div>
+<div class="cenario"><strong><code>//go:embed</code> dentro de uma função</strong>
+<p>A diretiva só vale para variáveis de pacote (fora das funções):</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	_ "embed"
+	"fmt"
+)
+
+func main() {
+	//go:embed dados.txt
+	var dados string
+	fmt.Println(dados)
+}</pre>
+<pre class="term" data-cwd="~/projetos/embed-erro2">$ go run .
+# embederro2
+./main.go:9:4: go:embed cannot apply to var inside func</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>import _ "embed"</code></td><td>Liga o recurso (quando não usa <code>embed.FS</code>).</td></tr>
+<tr><td><code>//go:embed a.txt</code> + <code>var s string</code></td><td>Arquivo numa string.</td></tr>
+<tr><td><code>var b []byte</code></td><td>Arquivo em bytes.</td></tr>
+<tr><td><code>//go:embed pasta/*</code> + <code>var fs embed.FS</code></td><td>Vários arquivos.</td></tr>
+<tr><td><code>fs.ReadFile("pasta/a.txt")</code></td><td>Lê um arquivo embutido.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. A diretiva</h3><p>Complete a linha que embute o arquivo:</p><div class="ex-code">//go:<input data-answer="embed" aria-label="resposta"> ajuda.txt</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">2. Onde fica o conteúdo de um arquivo embutido com <code>//go:embed</code>?</p>
+<label><input type="radio" name="q2"> Na mesma pasta, ao lado do executável</label>
+<label><input type="radio" name="q2"> Dentro do executável, colocado na compilação</label>
+<label><input type="radio" name="q2"> Na internet</label>
+<label><input type="radio" name="q2"> No GOPATH</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. Onde a diretiva <code>//go:embed</code> pode ser usada?</p>
+<label><input type="radio" name="q3"> Em qualquer linha</label>
+<label><input type="radio" name="q3"> Logo acima de uma variável de pacote</label>
+<label><input type="radio" name="q3"> Dentro da <code>main</code></label>
+<label><input type="radio" name="q3"> Só em testes</label></div>
+
+<p>Arquivo de apoio desta missão, <code>saudacao.txt</code> (crie junto com o <code>main.go</code>):</p>
+<pre class="file" data-file="saudacao.txt">Olá do arquivo embutido!</pre>
+<div class="trycmd" data-goal="src://go:embed saudacao\.txt;;out:Olá do arquivo embutido!;;semerro">
+<p class="try-task"><strong>Missão:</strong> embuta o arquivo <code>saudacao.txt</code> (arquivo de apoio acima) na variável <code>saudacao</code> e escreva o conteúdo. Rode com <code>go run .</code> num módulo; a saída deve ser <code>Olá do arquivo embutido!</code>.</p>
+<pre class="script" data-file="main.go" data-cmd="go run .">
+package main
+
+import "fmt"
+
+var saudacao string
+
+func main() {
+	fmt.Print(saudacao)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	_ "embed"
+	"fmt"
+)
+
+//go:embed saudacao.txt
+var saudacao string
+
+func main() {
+	fmt.Print(saudacao)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Olá do arquivo embutido!
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>//go:embed</code> põe arquivos dentro do executável.</li>
+<li>Um arquivo vai para <code>string</code> ou <code>[]byte</code>; vários, para <code>embed.FS</code>.</li>
+<li>A diretiva fica acima de uma variável de pacote, e o arquivo precisa existir na compilação.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

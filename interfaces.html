@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interfaces em Go — contratos implícitos, Stringer, any e type switch | Guia Go</title>
+<meta name="description" content="Interfaces em Go: declarar um conjunto de métodos, implementação implícita, fmt.Stringer, o tipo any, type assertion e type switch.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Interfaces</span></h1>
+
+<p class="intro">Uma interface é um <strong>contrato</strong>: uma lista de métodos. Qualquer tipo que tenha esses métodos cumpre o contrato, <strong>sem precisar dizer isso em lugar nenhum</strong>. É assim que uma função Go aceita “qualquer coisa que tenha <code>Area()</code>”, seja retângulo, círculo ou algo que ainda nem existe.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Declarar <code>type Forma interface { Area() float64 }</code> e usar tipos diferentes no mesmo lugar.</li><li>A implementação implícita e a interface <code>fmt.Stringer</code>.</li><li>O tipo <code>any</code>, a <em>type assertion</em> <code>v.(T)</code> e o <em>type switch</em>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Um contrato, vários tipos</h2>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"math"
+)
+
+type Forma interface {
+	Area() float64
+}
+
+type Retangulo struct{ L, A float64 }
+type Circulo struct{ R float64 }
+
+func (r Retangulo) Area() float64 { return r.L * r.A }
+func (c Circulo) Area() float64   { return math.Pi * c.R * c.R }
+
+func main() {
+	formas := []Forma{Retangulo{3, 4}, Circulo{1}}
+	total := 0.0
+	for _, f := range formas {
+		fmt.Printf("%T: %.2f\n", f, f.Area())
+		total += f.Area()
+	}
+	fmt.Printf("total: %.2f\n", total)
+}</pre>
+<pre class="term" data-cwd="~/projetos/interfaces">$ go run main.go
+main.Retangulo: 12.00
+main.Circulo: 3.14
+total: 15.14</pre>
+<p><code>Retangulo</code> e <code>Circulo</code> nunca dizem “eu implemento <code>Forma</code>”. Basta terem o método <code>Area() float64</code>. Por isso os dois cabem no mesmo <code>[]Forma</code>, e o laço chama o <code>Area</code> certo de cada um.</p>
+<hr>
+<h2>2. <code>Stringer</code>, <code>any</code> e descobrir o tipo</h2>
+<p>A interface <code>fmt.Stringer</code> tem só <code>String() string</code>: quem a cumpre controla como é escrito pelo <code>fmt</code>. O <code>any</code> (interface vazia) aceita qualquer valor; para usar o valor, você pergunta o tipo com <code>v.(T)</code> ou com um <code>switch v.(type)</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+type Pessoa struct {
+	Nome  string
+	Idade int
+}
+
+func (p Pessoa) String() string {
+	return fmt.Sprintf("%s (%d anos)", p.Nome, p.Idade)
+}
+
+func descrever(v any) string {
+	switch x := v.(type) {
+	case int:
+		return fmt.Sprint("inteiro ", x)
+	case string:
+		return "texto de " + fmt.Sprint(len(x)) + " bytes"
+	case fmt.Stringer:
+		return "Stringer: " + x.String()
+	default:
+		return fmt.Sprintf("outro tipo: %T", x)
+	}
+}
+
+func main() {
+	ana := Pessoa{"Ana", 30}
+	fmt.Println(ana)
+	for _, v := range []any{42, "olá", ana, 3.5} {
+		fmt.Println(descrever(v))
+	}
+
+	var algo any = "Go"
+	s, ok := algo.(string)
+	fmt.Println(s, ok)
+	n, ok := algo.(int)
+	fmt.Println(n, ok)
+}</pre>
+<pre class="term" data-cwd="~/projetos/interfaces2">$ go run main.go
+Ana (30 anos)
+inteiro 42
+texto de 4 bytes
+Stringer: Ana (30 anos)
+outro tipo: float64
+Go true
+0 false</pre>
+<p>A forma com dois valores, <code>s, ok := algo.(string)</code>, não dá panic: quando o tipo não confere, <code>ok</code> vem <code>false</code> e o valor vem zero.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Faltou um método do contrato</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+type Forma interface {
+	Area() float64
+	Perimetro() float64
+}
+
+type Quadrado struct{ L float64 }
+
+func (q Quadrado) Area() float64 { return q.L * q.L }
+
+func main() {
+	var f Forma = Quadrado{2}
+	fmt.Println(f.Area())
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-interface">$ go run main.go
+# command-line-arguments
+./main.go:15:16: cannot use Quadrado{…} (value of struct type Quadrado) as Forma value in variable declaration: Quadrado does not implement Forma (missing method Perimetro)</pre></div>
+<div class="cenario"><strong>Type assertion de um valor só, com o tipo errado</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var algo any = "Go"
+	n := algo.(int)
+	fmt.Println(n)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-assert">$ go run main.go
+panic: interface conversion: interface {} is string, not int
+
+goroutine 1 [running]:
+main.main()
+	/home/ana/projetos/erro-assert/main.go:7 +0x28
+exit status 2</pre>
+<p>Use a forma <code>n, ok := algo.(int)</code> quando não tiver certeza.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>type I interface { M() T }</code></td><td>Declara o contrato.</td></tr>
+<tr><td>(nada a escrever)</td><td>Um tipo cumpre a interface se tiver os métodos.</td></tr>
+<tr><td><code>String() string</code></td><td>Cumpre <code>fmt.Stringer</code>: muda como o <code>fmt</code> escreve.</td></tr>
+<tr><td><code>any</code></td><td>Aceita qualquer valor.</td></tr>
+<tr><td><code>v, ok := x.(T)</code></td><td>Pergunta se <code>x</code> guarda um <code>T</code>.</td></tr>
+<tr><td><code>switch v := x.(type) { case int: … }</code></td><td>Escolhe pelo tipo.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Declare</h3><p>Complete:</p><div class="ex-code">type Animal <input data-answer="interface" aria-label="resposta"> {
+    Som() string
+}</div></div>
+
+<div class="exercise"><h3>2. Qualquer valor</h3><p>Complete com o tipo que aceita qualquer coisa:</p><div class="ex-code">func mostrar(v <input data-answer="any" aria-label="resposta">) {</div></div>
+
+<div class="exercise"><h3>3. Switch de tipo</h3><p>Complete:</p><div class="ex-code">switch x := v.(<input data-answer="type" aria-label="resposta">) {</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Como um tipo diz que implementa uma interface em Go?</p>
+<label><input type="radio" name="q4"> Com <code>implements</code></label>
+<label><input type="radio" name="q4"> Não diz: basta ter os métodos</label>
+<label><input type="radio" name="q4"> Com <code>extends</code></label>
+<label><input type="radio" name="q4"> Registrando num arquivo</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. O que <code>n, ok := algo.(int)</code> faz se <code>algo</code> guarda uma string?</p>
+<label><input type="radio" name="q5"> Dá panic</label>
+<label><input type="radio" name="q5"> <code>ok</code> fica <code>false</code> e <code>n</code> fica 0</label>
+<label><input type="radio" name="q5"> Converte a string em número</label>
+<label><input type="radio" name="q5"> Não compila</label></div>
+
+<div class="trycmd" data-goal="src:func \(\w+ \*?Cachorro\) Som\(\) string;;out:Cachorro faz au au;;semerro">
+<p class="try-task"><strong>Missão:</strong> crie o tipo <code>Cachorro</code> com o método <code>Som() string</code> que devolve <code>au au</code>, para ele cumprir a interface <code>Animal</code>. A saída deve ser <code>Cachorro faz au au</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+type Animal interface {
+	Som() string
+}
+
+// crie o tipo Cachorro e o método aqui
+
+func main() {
+	var a Animal
+	fmt.Println(a)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+type Animal interface {
+	Som() string
+}
+
+type Cachorro struct{}
+
+func (c Cachorro) Som() string { return "au au" }
+
+func main() {
+	var a Animal = Cachorro{}
+	fmt.Println("Cachorro faz", a.Som())
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Cachorro faz au au
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:\) String\(\) string;;out:café: R$ 4.50;;semerro">
+<p class="try-task"><strong>Missão:</strong> dê ao tipo <code>Produto</code> um método <code>String() string</code> para o <code>fmt.Println(p)</code> escrever <code>café: R$ 4.50</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+type Produto struct {
+	Nome  string
+	Preco float64
+}
+
+func main() {
+	p := Produto{"café", 4.5}
+	fmt.Println(p)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+type Produto struct {
+	Nome  string
+	Preco float64
+}
+
+func (p Produto) String() string {
+	return fmt.Sprintf("%s: R$ %.2f", p.Nome, p.Preco)
+}
+
+func main() {
+	p := Produto{"café", 4.5}
+	fmt.Println(p)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+café: R$ 4.50
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Interface é uma lista de métodos; quem tem os métodos cumpre o contrato.</li>
+<li><code>fmt.Stringer</code> controla como um tipo é escrito.</li>
+<li><code>any</code> aceita tudo; descubra o tipo com <code>v.(T)</code> ou <code>switch v.(type)</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

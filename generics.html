@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generics em Go — parâmetros de tipo, any, cmp.Ordered e restrições | Guia Go</title>
+<meta name="description" content="Generics básicos em Go: funções com parâmetros de tipo [T any], cmp.Ordered, tipos genéricos como Pilha[T] e restrições com ~int | ~float64.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Generics</span> básicos</h1>
+
+<p class="intro">Sem generics, uma função <code>Maior</code> precisaria de uma versão para <code>int</code>, outra para <code>float64</code>, outra para <code>string</code>… Com <strong>parâmetros de tipo</strong> você escreve uma vez só, e o compilador confere, em cada chamada, se o tipo serve.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Escrever funções com <code>[T restrição]</code> e chamá-las com ou sem o tipo explícito.</li><li>As restrições <code>any</code> e <code>cmp.Ordered</code>, e criar a sua com <code>~int | ~float64</code>.</li><li>Um tipo genérico, <code>Pilha[T]</code>, com métodos.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Funções genéricas</h2>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"cmp"
+	"fmt"
+)
+
+func Maior[T cmp.Ordered](a, b T) T {
+	if a &gt; b {
+		return a
+	}
+	return b
+}
+
+func Mapear[T, R any](lista []T, f func(T) R) []R {
+	saida := make([]R, 0, len(lista))
+	for _, v := range lista {
+		saida = append(saida, f(v))
+	}
+	return saida
+}
+
+func main() {
+	fmt.Println(Maior(3, 7))
+	fmt.Println(Maior("abacaxi", "banana"))
+	fmt.Println(Maior[float64](2.5, 1))
+
+	nomes := []string{"ana", "rui"}
+	tamanhos := Mapear(nomes, func(s string) int { return len(s) })
+	fmt.Println(tamanhos)
+}</pre>
+<pre class="term" data-cwd="~/projetos/generics">$ go run main.go
+7
+banana
+2.5
+[3 3]</pre>
+<dl class="anatomy"><dt>[T cmp.Ordered]</dt><dd>o parâmetro de tipo <code>T</code>, que precisa ser “ordenável” (aceitar <code>&lt;</code> e <code>&gt;</code>).</dd><dt>(a, b T) T</dt><dd>recebe dois <code>T</code> e devolve um <code>T</code>.</dd><dt>Maior[float64](2.5, 1)</dt><dd>o tipo pode ser dito na chamada; quase sempre o Go deduz sozinho.</dd></dl>
+<hr>
+<h2>2. Tipos genéricos e restrições próprias</h2>
+<p>Uma struct também pode ter parâmetro de tipo: <code>Pilha[string]</code> só aceita strings. Para devolver “nada” de um <code>T</code> qualquer, use <code>var zero T</code>. E a restrição <code>Numero</code> aceita <code>int</code>, <code>float64</code> e tipos baseados neles (o <code>~</code>):</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+type Pilha[T any] struct {
+	itens []T
+}
+
+func (p *Pilha[T]) Empilhar(v T) {
+	p.itens = append(p.itens, v)
+}
+
+func (p *Pilha[T]) Desempilhar() (T, bool) {
+	var zero T
+	if len(p.itens) == 0 {
+		return zero, false
+	}
+	ultimo := p.itens[len(p.itens)-1]
+	p.itens = p.itens[:len(p.itens)-1]
+	return ultimo, true
+}
+
+type Numero interface {
+	~int | ~float64
+}
+
+func Somar[T Numero](nums ...T) T {
+	var total T
+	for _, n := range nums {
+		total += n
+	}
+	return total
+}
+
+func main() {
+	var p Pilha[string]
+	p.Empilhar("a")
+	p.Empilhar("b")
+	v, ok := p.Desempilhar()
+	fmt.Println(v, ok)
+	v, ok = p.Desempilhar()
+	fmt.Println(v, ok)
+	v, ok = p.Desempilhar()
+	fmt.Printf("%q %v\n", v, ok)
+
+	fmt.Println(Somar(1, 2, 3), Somar(0.5, 0.25))
+}</pre>
+<pre class="term" data-cwd="~/projetos/pilha">$ go run main.go
+b true
+a true
+"" false
+6 0.75</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Tipo que não cumpre a restrição</strong>
+<p><code>bool</code> não tem ordem (não dá para dizer se <code>true &gt; false</code>):</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"cmp"
+	"fmt"
+)
+
+func Maior[T cmp.Ordered](a, b T) T {
+	if a &gt; b {
+		return a
+	}
+	return b
+}
+
+func main() {
+	fmt.Println(Maior(true, false))
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-generics">$ go run main.go
+# command-line-arguments
+./main.go:16:19: bool does not satisfy cmp.Ordered (bool missing in ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr | ~float32 | ~float64 | ~string)</pre></div>
+<div class="cenario"><strong>Dois tipos diferentes para o mesmo <code>T</code></strong>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"cmp"
+	"fmt"
+)
+
+func Maior[T cmp.Ordered](a, b T) T {
+	if a &gt; b {
+		return a
+	}
+	return b
+}
+
+func main() {
+	fmt.Println(Maior(3, "sete"))
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-generics2">$ go run main.go
+# command-line-arguments
+./main.go:16:23: in call to Maior, mismatched types untyped int and untyped string (cannot infer T)</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>func F[T any](v T) T</code></td><td>Função genérica.</td></tr>
+<tr><td><code>[T cmp.Ordered]</code></td><td>T aceita <code>&lt;</code> e <code>&gt;</code> (números e strings).</td></tr>
+<tr><td><code>type Numero interface { ~int | ~float64 }</code></td><td>Restrição própria.</td></tr>
+<tr><td><code>type Pilha[T any] struct { … }</code></td><td>Tipo genérico.</td></tr>
+<tr><td><code>var zero T</code></td><td>O valor zero de T.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Parâmetro de tipo</h3><p>Complete:</p><div class="ex-code">func Primeiro[<input data-answer="T any" aria-label="resposta">](lista []T) T {</div></div>
+
+<div class="exercise"><h3>2. Ordenável</h3><p>Complete a restrição do pacote <code>cmp</code>:</p><div class="ex-code">func Menor[T cmp.<input data-answer="Ordered" aria-label="resposta">](a, b T) T {</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. Para que servem os generics?</p>
+<label><input type="radio" name="q3"> Para deixar o programa mais lento</label>
+<label><input type="radio" name="q3"> Para escrever uma função ou tipo uma vez e usar com vários tipos, com conferência do compilador</label>
+<label><input type="radio" name="q3"> Para trocar interfaces</label>
+<label><input type="radio" name="q3"> Para rodar em paralelo</label></div>
+
+<div class="mc" data-answer="1"><p class="mc-q">4. Por que <code>Maior(true, false)</code> não compila?</p>
+<label><input type="radio" name="q4"> Porque <code>bool</code> não cumpre <code>cmp.Ordered</code></label>
+<label><input type="radio" name="q4"> Porque faltou o tipo explícito</label>
+<label><input type="radio" name="q4"> Porque são dois valores</label>
+<label><input type="radio" name="q4"> Porque <code>Maior</code> só aceita int</label></div>
+
+<div class="trycmd" data-goal="src:func Contem\[T comparable\];;outre:^true false$;;semerro">
+<p class="try-task"><strong>Missão:</strong> escreva a função genérica <code>Contem[T comparable](lista []T, alvo T) bool</code>. A saída deve ser <code>true false</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println([]int{1, 2, 3}, []string{"a", "b"})
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func Contem[T comparable](lista []T, alvo T) bool {
+	for _, v := range lista {
+		if v == alvo {
+			return true
+		}
+	}
+	return false
+}
+
+func main() {
+	fmt.Println(Contem([]int{1, 2, 3}, 2), Contem([]string{"a", "b"}, "z"))
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+true false
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Parâmetros de tipo: <code>func F[T restrição](…)</code>.</li>
+<li><code>any</code> aceita tudo; <code>cmp.Ordered</code>, o que tem ordem; <code>comparable</code>, o que aceita <code>==</code>.</li>
+<li>Tipos também podem ser genéricos: <code>Pilha[T]</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

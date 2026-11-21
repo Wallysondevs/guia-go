@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ponteiros em Go — &amp;, *, nil e quando usar | Guia Go</title>
+<meta name="description" content="Ponteiros em Go: o endereço com &amp;, o valor apontado com *, ponteiro nil, passar ponteiros para funções, ponteiros para structs e new.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Ponteiros</span></h1>
+
+<p class="intro">Um ponteiro é um <strong>endereço</strong>: em vez de guardar o valor, ele guarda onde o valor mora na memória. Em Go você usa ponteiros para uma função mudar uma variável de fora e para não copiar structs grandes. Não há conta com ponteiros como em C: é bem mais seguro.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li><code>&amp;x</code> (o endereço de <code>x</code>) e <code>*p</code> (o valor no endereço).</li><li>Passar <code>*int</code> para uma função mudar a variável de quem chamou.</li><li>Ponteiros para structs, <code>new</code> e o perigo do ponteiro <code>nil</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. <code>&amp;</code> e <code>*</code></h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	x := 10
+	p := &amp;x
+	fmt.Println("x =", x)
+	fmt.Println("p aponta para um int:", *p)
+	fmt.Printf("p tem tipo %T\n", p)
+
+	*p = 20
+	fmt.Println("depois de *p = 20, x =", x)
+
+	var nada *int
+	fmt.Println("ponteiro vazio:", nada, nada == nil)
+}</pre>
+<pre class="term" data-cwd="~/projetos/ponteiros">$ go run main.go
+x = 10
+p aponta para um int: 10
+p tem tipo *int
+depois de *p = 20, x = 20
+ponteiro vazio: &lt;nil&gt; true</pre>
+<dl class="anatomy"><dt>&amp;x</dt><dd>“o endereço de x”.</dd><dt>p := &amp;x</dt><dd><code>p</code> é do tipo <code>*int</code>: ponteiro para int.</dd><dt>*p</dt><dd>“o valor que está no endereço p”: lê ou escreve em <code>x</code>.</dd></dl>
+<p>Ponteiro sem valor é <code>nil</code> (aparece como <code>&lt;nil&gt;</code>): ainda não aponta para nada.</p>
+<hr>
+<h2>2. Para que serve</h2>
+<p>Na aula de <a href="funcoes.html">funções</a> você viu que os argumentos são cópias. Passando o <strong>endereço</strong>, a função consegue mudar o original. Com structs, o Go deixa escrever <code>c.Valor</code> mesmo quando <code>c</code> é ponteiro. E <code>new(T)</code> cria um valor zero e devolve o ponteiro:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func dobrar(n *int) {
+	*n = *n * 2
+}
+
+type Contador struct {
+	Valor int
+}
+
+func novoContador() *Contador {
+	return &amp;Contador{Valor: 100}
+}
+
+func main() {
+	x := 21
+	dobrar(&amp;x)
+	fmt.Println("x:", x)
+
+	c := novoContador()
+	c.Valor++ // o Go entende (*c).Valor
+	fmt.Println("contador:", c.Valor)
+
+	q := new(int)
+	*q = 7
+	fmt.Println("new(int):", *q)
+}</pre>
+<pre class="term" data-cwd="~/projetos/ponteiros2">$ go run main.go
+x: 42
+contador: 101
+new(int): 7</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Usar um ponteiro <code>nil</code></strong>
+<p>Ler <code>*p</code> quando <code>p</code> é <code>nil</code> compila, mas para o programa:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var p *int
+	fmt.Println("antes")
+	fmt.Println(*p)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-nil">$ go run main.go
+antes
+panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x0 pc=0x499e31]
+
+goroutine 1 [running]:
+main.main()
+	/home/ana/projetos/erro-nil/main.go:8 +0x51
+exit status 2</pre>
+<p><code>nil pointer dereference</code> quer dizer “tentou ler o valor de um ponteiro que não aponta para nada”. Confira <code>if p != nil</code> antes.</p></div>
+<div class="cenario"><strong>Passar o valor onde se espera o endereço</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func dobrar(n *int) {
+	*n = *n * 2
+}
+
+func main() {
+	x := 21
+	dobrar(x)
+	fmt.Println(x)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-ptr">$ go run main.go
+# command-line-arguments
+./main.go:11:9: cannot use x (variable of type int) as *int value in argument to dobrar</pre>
+<p>Chame <code>dobrar(&amp;x)</code>.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>p := &amp;x</code></td><td>Ponteiro para <code>x</code> (tipo <code>*int</code>).</td></tr>
+<tr><td><code>*p</code></td><td>Lê ou escreve o valor apontado.</td></tr>
+<tr><td><code>func f(n *int)</code></td><td>Recebe um endereço; chame com <code>f(&amp;x)</code>.</td></tr>
+<tr><td><code>&amp;Tipo{…}</code>, <code>new(T)</code></td><td>Cria e devolve o ponteiro.</td></tr>
+<tr><td><code>p == nil</code></td><td>Ponteiro que não aponta para nada.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Endereço</h3><p>Complete para pegar o endereço de <code>x</code>:</p><div class="ex-code">p := <input data-answer="&amp;" aria-label="resposta">x</div></div>
+
+<div class="exercise"><h3>2. Valor apontado</h3><p>Complete para mudar <code>x</code> através de <code>p</code>:</p><div class="ex-code"><input data-answer="*p" aria-label="resposta"> = 5</div></div>
+
+<div class="exercise"><h3>3. Tipo</h3><p>Complete o tipo do parâmetro (ponteiro para int):</p><div class="ex-code">func zerar(n <input data-answer="*int" aria-label="resposta">) {</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Se <code>p := &amp;x</code> e depois <code>*p = 9</code>, quanto vale <code>x</code>?</p>
+<label><input type="radio" name="q4"> O valor antigo</label>
+<label><input type="radio" name="q4"> 9</label>
+<label><input type="radio" name="q4"> O endereço</label>
+<label><input type="radio" name="q4"> nil</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. O que acontece ao ler <code>*p</code> com <code>p</code> igual a <code>nil</code>?</p>
+<label><input type="radio" name="q5"> Devolve 0</label>
+<label><input type="radio" name="q5"> panic: nil pointer dereference</label>
+<label><input type="radio" name="q5"> Não compila</label>
+<label><input type="radio" name="q5"> Devolve nil</label></div>
+
+<div class="trycmd" data-goal="src:func zerar\(\w+ \*int\);;src:zerar\(&amp;pontos\);;out:pontos: 0;;semerro">
+<p class="try-task"><strong>Missão:</strong> escreva <code>func zerar(n *int)</code>, que põe 0 no valor apontado, e chame com <code>zerar(&amp;pontos)</code>. A saída deve ser <code>pontos: 0</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	pontos := 50
+	fmt.Println("pontos:", pontos)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func zerar(n *int) {
+	*n = 0
+}
+
+func main() {
+	pontos := 50
+	zerar(&amp;pontos)
+	fmt.Println("pontos:", pontos)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+pontos: 0
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>&amp;x</code> é o endereço; <code>*p</code> é o valor apontado.</li>
+<li>Passe ponteiros quando a função precisa mudar o original.</li>
+<li>Ponteiro <code>nil</code> não aponta para nada: ler dele dá panic.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

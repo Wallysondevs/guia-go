@@ -45,13 +45,13 @@ var NIVEIS = [
   ]},
   { id: "n2", nome: "Nível 2 · Intermediário", curto: "Intermediário", desc: "Ponteiros, interfaces, pacotes, testes e arquivos", grupos: [
     { grupo: "Ponteiros e Interfaces", itens: [
-      ["ponteiros.html", "Ponteiros", { pronta: false }],
-      ["interfaces.html", "Interfaces", { pronta: false }],
-      ["generics.html", "Generics Básicos", { pronta: false }]
+      ["ponteiros.html", "Ponteiros"],
+      ["interfaces.html", "Interfaces"],
+      ["generics.html", "Generics Básicos"]
     ]},
     { grupo: "Organizando o Código", itens: [
-      ["pacotes-e-modulos.html", "Pacotes e Módulos", { pronta: false }],
-      ["embed.html", "Embutindo Arquivos (embed)", { pronta: false }]
+      ["pacotes-e-modulos.html", "Pacotes e Módulos"],
+      ["embed.html", "Embutindo Arquivos (embed)"]
     ]},
     { grupo: "Testes", itens: [
       ["go-test.html", "Testes (go test)", { pronta: false }],
