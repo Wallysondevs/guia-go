@@ -54,16 +54,16 @@ var NIVEIS = [
       ["embed.html", "Embutindo Arquivos (embed)"]
     ]},
     { grupo: "Testes", itens: [
-      ["go-test.html", "Testes (go test)", { pronta: false }],
-      ["tabela-de-testes.html", "Tabela de Testes", { pronta: false }]
+      ["go-test.html", "Testes (go test)"],
+      ["tabela-de-testes.html", "Tabela de Testes"]
     ]},
     { grupo: "Erros a Fundo", itens: [
-      ["errors-is-as.html", "errors.Is e errors.As", { pronta: false }],
-      ["panic-recover.html", "panic e recover", { pronta: false }]
+      ["errors-is-as.html", "errors.Is e errors.As"],
+      ["panic-recover.html", "panic e recover"]
     ]},
     { grupo: "Arquivos e Dados", itens: [
-      ["arquivos-os-bufio.html", "Arquivos (os e bufio)", { pronta: false }],
-      ["json.html", "JSON (encoding/json)", { pronta: false }]
+      ["arquivos-os-bufio.html", "Arquivos (os e bufio)"],
+      ["json.html", "JSON (encoding/json)"]
     ]}
   ]},
   { id: "n3", nome: "Nível 3 · Avançado", curto: "Avançado", desc: "Concorrência, rede e ferramentas", grupos: [

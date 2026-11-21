@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>panic e recover em Go — quando o programa quebra e como se recuperar | Guia Go</title>
+<meta name="description" content="panic e recover em Go: o que é um panic, a pilha de chamadas, os defer que rodam mesmo assim, recover dentro de defer e quando usar error em vez de panic.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">panic</span> e <span class="hl">recover</span></h1>
+
+<p class="intro">Um <code>panic</code> é o programa dizendo “não dá para continuar”: índice fora do slice, ponteiro <code>nil</code>, divisão inteira por zero, ou um <code>panic(…)</code> chamado por você. Ele desfaz as funções uma a uma, rodando os <code>defer</code>, e encerra o programa, a não ser que um <code>recover</code> o segure.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Ler a saída de um <code>panic</code>: a mensagem e a pilha (<em>goroutine 1 [running]</em>).</li><li>Ver que os <code>defer</code> rodam mesmo durante um panic.</li><li>Segurar um panic com <code>recover</code> dentro de um <code>defer</code>, e saber quando <strong>não</strong> usar panic.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Um panic de perto</h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func validarIdade(idade int) {
+	if idade &lt; 0 {
+		panic(fmt.Sprintf("idade inválida: %d", idade))
+	}
+	fmt.Println("idade ok:", idade)
+}
+
+func main() {
+	defer fmt.Println("defer da main: roda mesmo com panic")
+	validarIdade(30)
+	validarIdade(-1)
+	fmt.Println("fim")
+}</pre>
+<pre class="term" data-cwd="~/projetos/panic">$ go run main.go
+idade ok: 30
+defer da main: roda mesmo com panic
+panic: idade inválida: -1
+
+goroutine 1 [running]:
+main.validarIdade(0x270d90b74ea8?)
+	/home/ana/projetos/panic/main.go:7 +0xc8
+main.main()
+	/home/ana/projetos/panic/main.go:15 +0x67
+exit status 2</pre>
+<p>A saída mostra a mensagem do <code>panic</code>, a pilha de chamadas (quem chamou quem, com arquivo e linha) e o <code>exit status 2</code>. Repare que o <code>defer</code> da <code>main</code> rodou <strong>antes</strong> do programa morrer, e que <code>fim</code> nunca apareceu.</p>
+<hr>
+<h2>2. <code>recover</code></h2>
+<p>O <code>recover()</code> só funciona dentro de uma função adiada com <code>defer</code>. Ele devolve o valor do panic (ou <code>nil</code>, se não houve panic) e faz a função terminar normalmente. Aqui ele transforma a divisão por zero num <code>error</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func dividir(a, b int) (res int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("recuperado: %v", r)
+		}
+	}()
+	return a / b, nil
+}
+
+func main() {
+	fmt.Println(dividir(10, 2))
+	fmt.Println(dividir(1, 0))
+	fmt.Println("o programa continuou")
+}</pre>
+<pre class="term" data-cwd="~/projetos/recover">$ go run main.go
+5 &lt;nil&gt;
+0 recuperado: runtime error: integer divide by zero
+o programa continuou</pre>
+<div class="tip"><strong>Panic é exceção, não controle de fluxo</strong><p>Para erros esperados (arquivo que não existe, texto que não é número), devolva um <code>error</code>. Deixe o <code>panic</code> para defeitos do programa, e o <code>recover</code> para fronteiras, como um servidor que não pode cair por causa de uma requisição.</p></div>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong><code>recover</code> fora de um <code>defer</code></strong>
+<p>Chamado direto, o <code>recover</code> devolve <code>nil</code> na hora (ainda não houve panic) e não segura nada depois:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	if r := recover(); r != nil {
+		fmt.Println("segurei:", r)
+	}
+	var lista []int
+	fmt.Println(lista[0])
+}</pre>
+<pre class="term" data-cwd="~/projetos/recover-fora">$ go run main.go
+panic: runtime error: index out of range [0] with length 0
+
+goroutine 1 [running]:
+main.main()
+	/home/ana/projetos/recover-fora/main.go:10 +0x1d
+exit status 2</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>panic("msg")</code></td><td>Interrompe a função e começa a desfazer a pilha.</td></tr>
+<tr><td><code>defer func() { if r := recover(); r != nil { … } }()</code></td><td>Segura o panic.</td></tr>
+<tr><td><code>exit status 2</code></td><td>O programa terminou por um panic.</td></tr>
+<tr><td><code>error</code></td><td>Para erros esperados; panic é para defeitos.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Segurar</h3><p>Complete:</p><div class="ex-code">if r := <input data-answer="recover" aria-label="resposta">(); r != nil {</div></div>
+
+<div class="exercise"><h3>2. Onde</h3><p>Em que tipo de função o <code>recover</code> funciona?</p><div class="ex-code">numa função chamada com <input data-answer="defer" aria-label="resposta"></div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. O que acontece com os <code>defer</code> quando há um panic?</p>
+<label><input type="radio" name="q3"> Não rodam</label>
+<label><input type="radio" name="q3"> Rodam, enquanto a pilha é desfeita</label>
+<label><input type="radio" name="q3"> Rodam duas vezes</label>
+<label><input type="radio" name="q3"> Viram panic também</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Para um arquivo que pode não existir, o que usar?</p>
+<label><input type="radio" name="q4"> <code>panic</code></label>
+<label><input type="radio" name="q4"> Devolver um <code>error</code></label>
+<label><input type="radio" name="q4"> <code>os.Exit</code> sempre</label>
+<label><input type="radio" name="q4"> <code>recover</code></label></div>
+
+<div class="trycmd" data-goal="src:recover\(\);;src:defer func\(\);;out:recuperado: runtime error: index out of range [0] with length 0;;outre:^fim$;;semerro">
+<p class="try-task"><strong>Missão:</strong> a função <code>primeiro</code> dá panic com slice vazio. Ponha um <code>defer</code> com <code>recover</code> para ela escrever <code>recuperado: runtime error: index out of range [0] with length 0</code> e o programa continuar até <code>fim</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func primeiro(lista []int) {
+	fmt.Println(lista[0])
+}
+
+func main() {
+	primeiro([]int{})
+	fmt.Println("fim")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func primeiro(lista []int) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("recuperado:", r)
+		}
+	}()
+	fmt.Println(lista[0])
+}
+
+func main() {
+	primeiro([]int{})
+	fmt.Println("fim")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+recuperado: runtime error: index out of range [0] with length 0
+fim
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>panic</code> desfaz a pilha rodando os <code>defer</code> e encerra com <code>exit status 2</code>.</li>
+<li><code>recover()</code> dentro de um <code>defer</code> segura o panic.</li>
+<li>Erro esperado é <code>error</code>; panic é para defeitos.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>errors.Is e errors.As em Go — erros sentinela, embrulho e tipos de erro | Guia Go</title>
+<meta name="description" content="Como descobrir qual erro aconteceu em Go: erros sentinela com errors.Is, tipos de erro próprios com errors.As, fs.ErrNotExist e fs.PathError.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">errors.Is</span> e <span class="hl">errors.As</span></h1>
+
+<p class="intro">Na aula <a href="erros-error.html">Erros</a> você embrulhou erros com <code>%w</code>. Agora vem o outro lado: abrir o embrulho para <strong>descobrir qual erro foi</strong>. <code>errors.Is</code> pergunta “é este erro?”; <code>errors.As</code> pergunta “é deste tipo?” e entrega os detalhes.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Criar erros sentinela (<code>var ErrX = errors.New(…)</code>) e testá-los com <code>errors.Is</code>, mesmo embrulhados.</li><li>Criar um tipo de erro com o método <code>Error() string</code> e extraí-lo com <code>errors.As</code>.</li><li>Usar os erros da biblioteca padrão: <code>fs.ErrNotExist</code> e <code>*fs.PathError</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. <code>errors.Is</code>: é este erro?</h2>
+<p>Um <strong>erro sentinela</strong> é uma variável de erro conhecida, que quem chama pode comparar. O <code>errors.Is</code> procura o sentinela mesmo dentro de embrulhos feitos com <code>%w</code> (o <code>==</code> não acharia):</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+)
+
+var ErrSemEstoque = errors.New("produto sem estoque")
+
+func vender(produto string, estoque map[string]int) error {
+	if estoque[produto] == 0 {
+		return fmt.Errorf("vender %q: %w", produto, ErrSemEstoque)
+	}
+	estoque[produto]--
+	return nil
+}
+
+func main() {
+	estoque := map[string]int{"café": 1}
+	for _, p := range []string{"café", "café"} {
+		err := vender(p, estoque)
+		if errors.Is(err, ErrSemEstoque) {
+			fmt.Println("avise o cliente:", err)
+		} else if err == nil {
+			fmt.Println("vendido:", p)
+		}
+	}
+
+	_, err := os.Open("nao-existe.txt")
+	fmt.Println(err)
+	fmt.Println("não existe?", errors.Is(err, fs.ErrNotExist))
+}</pre>
+<pre class="term" data-cwd="~/projetos/errors-is">$ go run main.go
+vendido: café
+avise o cliente: vender "café": produto sem estoque
+open nao-existe.txt: no such file or directory
+não existe? true</pre>
+<hr>
+<h2>2. <code>errors.As</code>: é deste tipo?</h2>
+<p>Quando o erro carrega dados (qual campo, qual arquivo), crie um tipo com o método <code>Error() string</code>. O <code>errors.As</code> procura um erro daquele tipo no embrulho e o copia para a sua variável:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+)
+
+type ErroValidacao struct {
+	Campo  string
+	Motivo string
+}
+
+func (e *ErroValidacao) Error() string {
+	return e.Campo + ": " + e.Motivo
+}
+
+func cadastrar(nome string, idade int) error {
+	if idade &lt; 0 {
+		return fmt.Errorf("cadastro de %s: %w", nome, &amp;ErroValidacao{"idade", "não pode ser negativa"})
+	}
+	return nil
+}
+
+func main() {
+	err := cadastrar("Rui", -3)
+	fmt.Println(err)
+
+	var ev *ErroValidacao
+	if errors.As(err, &amp;ev) {
+		fmt.Println("campo com problema:", ev.Campo)
+	}
+
+	_, err = os.ReadFile("sumiu.txt")
+	var pe *fs.PathError
+	if errors.As(err, &amp;pe) {
+		fmt.Println("operação:", pe.Op, "| caminho:", pe.Path, "| erro:", pe.Err)
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/errors-as">$ go run main.go
+cadastro de Rui: idade: não pode ser negativa
+campo com problema: idade
+operação: open | caminho: sumiu.txt | erro: no such file or directory</pre>
+<dl class="anatomy"><dt>var ev *ErroValidacao</dt><dd>a variável que vai receber o erro encontrado.</dd><dt>errors.As(err, &amp;ev)</dt><dd>passa o <em>endereço</em> dela; devolve <code>true</code> se achou.</dd><dt>ev.Campo</dt><dd>os detalhes, agora acessíveis.</dd></dl>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong><code>==</code> não abre o embrulho, e <code>%v</code> não embrulha</strong>
+<p>Isto compila e roda, mas mostra duas armadilhas: comparar com <code>==</code> um erro embrulhado dá <code>false</code>, e um erro “embrulhado” com <code>%v</code> vira só texto, sem o original dentro:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+var ErrSemEstoque = errors.New("produto sem estoque")
+
+func main() {
+	err := fmt.Errorf("vender: %w", ErrSemEstoque)
+	fmt.Println("com ==:", err == ErrSemEstoque)
+	fmt.Println("com errors.Is:", errors.Is(err, ErrSemEstoque))
+
+	semW := fmt.Errorf("vender: %v", ErrSemEstoque)
+	fmt.Println("embrulhado com %v:", errors.Is(semW, ErrSemEstoque))
+}</pre>
+<pre class="term" data-cwd="~/projetos/errors-igual">$ go run main.go
+com ==: false
+com errors.Is: true
+embrulhado com %v: false</pre></div>
+<div class="cenario"><strong><code>errors.As</code> sem o <code>&amp;</code></strong>
+<p>O segundo argumento precisa ser um ponteiro. O <code>go vet</code> avisa:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+type ErroValidacao struct{ Campo string }
+
+func (e *ErroValidacao) Error() string { return e.Campo }
+
+func main() {
+	err := fmt.Errorf("x: %w", &amp;ErroValidacao{"idade"})
+	var ev ErroValidacao
+	fmt.Println(errors.As(err, ev))
+}</pre>
+<pre class="term" data-cwd="~/projetos/errors-as-erro">$ go vet main.go
+main.go:15:14: second argument to errors.As must be a non-nil pointer to either a type that implements error, or to any interface type</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>var ErrX = errors.New("…")</code></td><td>Erro sentinela.</td></tr>
+<tr><td><code>errors.Is(err, ErrX)</code></td><td>É este erro (mesmo embrulhado)?</td></tr>
+<tr><td><code>func (e *MeuErro) Error() string</code></td><td>Tipo de erro próprio.</td></tr>
+<tr><td><code>var e *MeuErro; errors.As(err, &amp;e)</code></td><td>É deste tipo? Copia para <code>e</code>.</td></tr>
+<tr><td><code>fs.ErrNotExist</code>, <code>*fs.PathError</code></td><td>Erros de arquivo da biblioteca padrão.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. É este?</h3><p>Complete:</p><div class="ex-code">if errors.<input data-answer="Is" aria-label="resposta">(err, fs.ErrNotExist) {</div></div>
+
+<div class="exercise"><h3>2. É deste tipo?</h3><p>Complete:</p><div class="ex-code">if errors.As(err, <input data-answer="&amp;" aria-label="resposta">ev) {</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. Por que <code>err == ErrSemEstoque</code> deu <code>false</code> com o erro embrulhado?</p>
+<label><input type="radio" name="q3"> Bug</label>
+<label><input type="radio" name="q3"> Porque o embrulho é outro erro; <code>errors.Is</code> abre as camadas, o <code>==</code> não</label>
+<label><input type="radio" name="q3"> Porque faltou <code>%v</code></label>
+<label><input type="radio" name="q3"> Porque sentinelas não podem ser comparados</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Quando usar <code>errors.As</code> em vez de <code>errors.Is</code>?</p>
+<label><input type="radio" name="q4"> Nunca</label>
+<label><input type="radio" name="q4"> Quando você quer os dados de um tipo de erro (campo, caminho), não só saber qual é</label>
+<label><input type="radio" name="q4"> Para criar erros</label>
+<label><input type="radio" name="q4"> Só com arquivos</label></div>
+
+<div class="trycmd" data-goal="src:errors\.Is\(err, (fs|os)\.ErrNotExist\);;out:arquivo não encontrado;;semerro">
+<p class="try-task"><strong>Missão:</strong> complete o <code>if</code> com <code>errors.Is</code> para reconhecer que o arquivo não existe e escrever <code>arquivo não encontrado</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	_, err := os.ReadFile("config-que-nao-existe.json")
+	if err != nil {
+		fmt.Println("outro erro:", err)
+	}
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+)
+
+func main() {
+	_, err := os.ReadFile("config-que-nao-existe.json")
+	if errors.Is(err, fs.ErrNotExist) {
+		fmt.Println("arquivo não encontrado")
+	} else if err != nil {
+		fmt.Println("outro erro:", err)
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+arquivo não encontrado
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>errors.Is</code> reconhece um erro sentinela, mesmo embrulhado com <code>%w</code>.</li>
+<li><code>errors.As</code> acha um tipo de erro e entrega os detalhes.</li>
+<li>Use <code>%w</code> (não <code>%v</code>) para embrulhar.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

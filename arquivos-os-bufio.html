@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arquivos em Go — os.WriteFile, os.ReadFile, os.Open e bufio.Scanner | Guia Go</title>
+<meta name="description" content="Ler e gravar arquivos em Go: os.WriteFile, os.ReadFile, os.OpenFile com append, ler linha a linha com bufio.Scanner, ler a entrada padrão e listar pastas.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Arquivos (<span class="hl">os</span> e <span class="hl">bufio</span>)</h1>
+
+<p class="intro">Quase todo programa de verdade lê ou grava arquivos. Em Go, os pacotes <code>os</code> e <code>bufio</code> cobrem o dia a dia: gravar e ler um arquivo inteiro numa linha, acrescentar no fim, ler linha a linha e até ler o que o usuário digita.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Gravar com <code>os.WriteFile</code>, ler com <code>os.ReadFile</code> e acrescentar com <code>os.OpenFile</code>.</li><li>Ler linha a linha com <code>bufio.Scanner</code> e listar uma pasta com <code>os.ReadDir</code>.</li><li>Ler a entrada padrão (<code>os.Stdin</code>) e escrever com <code>bufio.Writer</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Gravar, acrescentar e ler</h2>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	err := os.WriteFile("compras.txt", []byte("arroz\nfeijão\n"), 0644)
+	if err != nil {
+		fmt.Println("erro ao gravar:", err)
+		return
+	}
+
+	f, err := os.OpenFile("compras.txt", os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println("erro ao abrir:", err)
+		return
+	}
+	fmt.Fprintln(f, "café")
+	f.Close()
+
+	dados, err := os.ReadFile("compras.txt")
+	if err != nil {
+		fmt.Println("erro ao ler:", err)
+		return
+	}
+	fmt.Print(string(dados))
+	fmt.Println(len(dados), "bytes")
+}</pre>
+<pre class="term" data-cwd="~/projetos/arquivos">$ go run main.go
+arroz
+feijão
+café
+20 bytes</pre>
+<dl class="anatomy"><dt>os.WriteFile(nome, dados, 0644)</dt><dd>cria (ou apaga e recria) o arquivo com os bytes.</dd><dt>0644</dt><dd>as permissões no Linux/macOS: você lê e grava; os outros só leem.</dd><dt>os.O_APPEND|os.O_WRONLY</dt><dd>abre para escrever <strong>no fim</strong>, sem apagar.</dd></dl>
+<p>As três palavras e as três quebras de linha somam 18 caracteres, mas o arquivo tem <strong>20 bytes</strong>: o <code>ã</code> de <code>feijão</code> e o <code>é</code> de <code>café</code> ocupam dois bytes cada em UTF-8.</p>
+<hr>
+<h2>2. Linha a linha e listando a pasta</h2>
+<p>Para arquivos grandes, ler tudo de uma vez gasta memória. O <code>bufio.Scanner</code> entrega uma linha por vez, sem o <code>\n</code>:</p>
+<pre class="file" data-file="ler.go">package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+)
+
+func main() {
+	f, err := os.Open("compras.txt")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer f.Close()
+
+	sc := bufio.NewScanner(f)
+	n := 0
+	for sc.Scan() {
+		n++
+		fmt.Printf("%d: %s\n", n, strings.ToUpper(sc.Text()))
+	}
+	if err := sc.Err(); err != nil {
+		fmt.Println("erro lendo:", err)
+	}
+
+	entradas, _ := os.ReadDir(".")
+	for _, e := range entradas {
+		fmt.Println("na pasta:", e.Name())
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/arquivos">$ go run ler.go
+1: ARROZ
+2: FEIJÃO
+3: CAFÉ
+na pasta: compras.txt
+na pasta: ler.go
+na pasta: main.go</pre>
+<hr>
+<h2>3. Lendo o que vem do teclado (ou de outro programa)</h2>
+<p><code>os.Stdin</code> é a entrada padrão: o teclado, ou a saída de outro comando ligada com <code>|</code>. Aqui o <code>printf</code> manda dois nomes para o programa:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+)
+
+func main() {
+	sc := bufio.NewScanner(os.Stdin)
+	w := bufio.NewWriter(os.Stdout)
+	defer w.Flush()
+	for sc.Scan() {
+		fmt.Fprintf(w, "Olá, %s!\n", sc.Text())
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/stdin">$ printf 'Ana\nRui\n' | go run main.go
+Olá, Ana!
+Olá, Rui!</pre>
+<p>O <code>bufio.Writer</code> junta a saída num buffer e escreve de uma vez; o <code>defer w.Flush()</code> garante que nada fica para trás.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Arquivo, pasta ou tipo errado</strong>
+<p>Os erros do pacote <code>os</code> dizem a operação, o caminho e o motivo. Ler um arquivo que não existe, gravar numa pasta que não existe e tentar ler uma pasta como se fosse arquivo:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	_, err := os.ReadFile("nao-existe.txt")
+	fmt.Println(err)
+	err = os.WriteFile("pasta-que-nao-existe/a.txt", []byte("oi"), 0644)
+	fmt.Println(err)
+	_, err = os.ReadFile(".")
+	fmt.Println(err)
+}</pre>
+<pre class="term" data-cwd="~/projetos/arquivos-erro">$ go run main.go
+open nao-existe.txt: no such file or directory
+open pasta-que-nao-existe/a.txt: no such file or directory
+read .: is a directory</pre>
+<p>Para reagir a um desses de forma específica, use <code>errors.Is(err, fs.ErrNotExist)</code> (aula <a href="errors-is-as.html">errors.Is e errors.As</a>).</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>os.WriteFile(n, b, 0644)</code></td><td>Grava o arquivo inteiro.</td></tr>
+<tr><td><code>os.ReadFile(n)</code></td><td>Lê o arquivo inteiro.</td></tr>
+<tr><td><code>os.OpenFile(n, os.O_APPEND|os.O_WRONLY, 0644)</code></td><td>Abre para acrescentar.</td></tr>
+<tr><td><code>sc := bufio.NewScanner(f); for sc.Scan() { sc.Text() }</code></td><td>Lê linha a linha.</td></tr>
+<tr><td><code>bufio.NewScanner(os.Stdin)</code></td><td>Lê a entrada padrão.</td></tr>
+<tr><td><code>os.ReadDir(".")</code></td><td>Lista a pasta.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Ler tudo</h3><p>Complete:</p><div class="ex-code">dados, err := os.<input data-answer="ReadFile" aria-label="resposta">("notas.txt")</div></div>
+
+<div class="exercise"><h3>2. Linha a linha</h3><p>Complete:</p><div class="ex-code">for sc.<input data-answer="Scan" aria-label="resposta">() {</div></div>
+
+<div class="exercise"><h3>3. Fechar</h3><p>Complete para fechar no fim da função:</p><div class="ex-code"><input data-answer="defer" aria-label="resposta"> f.Close()</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. O que <code>os.WriteFile</code> faz se o arquivo já existe?</p>
+<label><input type="radio" name="q4"> Acrescenta no fim</label>
+<label><input type="radio" name="q4"> Apaga o conteúdo e grava o novo</label>
+<label><input type="radio" name="q4"> Dá erro</label>
+<label><input type="radio" name="q4"> Pergunta antes</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. O <code>sc.Text()</code> do <code>bufio.Scanner</code> inclui o <code>\n</code> do fim da linha?</p>
+<label><input type="radio" name="q5"> Sim</label>
+<label><input type="radio" name="q5"> Não</label>
+<label><input type="radio" name="q5"> Só no Windows</label>
+<label><input type="radio" name="q5"> Só na última linha</label></div>
+
+<div class="trycmd" data-goal="src:bufio\.NewScanner\(;;src:\.Scan\(\);;out:linhas: 2;;semerro">
+<p class="try-task"><strong>Missão:</strong> grave o arquivo <code>diario.txt</code> com duas linhas, <code>acordei</code> e <code>estudei Go</code>, depois leia com <code>bufio.Scanner</code> e mostre quantas linhas há. A saída deve ser <code>linhas: 2</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	os.WriteFile("diario.txt", []byte("acordei\nestudei Go\n"), 0644)
+	fmt.Println("linhas:")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+)
+
+func main() {
+	os.WriteFile("diario.txt", []byte("acordei\nestudei Go\n"), 0644)
+	f, err := os.Open("diario.txt")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	n := 0
+	for sc.Scan() {
+		n++
+	}
+	fmt.Println("linhas:", n)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+linhas: 2
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>os.WriteFile</code> e <code>os.ReadFile</code> gravam e leem tudo de uma vez.</li>
+<li><code>bufio.Scanner</code> lê linha a linha, de arquivos ou de <code>os.Stdin</code>.</li>
+<li>Confira o <code>err</code> de cada operação e feche com <code>defer f.Close()</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JSON em Go — json.Marshal, json.Unmarshal, tags e MarshalIndent | Guia Go</title>
+<meta name="description" content="Trabalhar com JSON em Go usando encoding/json: Marshal e MarshalIndent, Unmarshal para struct e map, tags json, omitempty, campos ignorados e erros de JSON inválido.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">JSON</span> (encoding/json)</h1>
+
+<p class="intro">JSON é o formato de texto que as APIs usam para trocar dados. O pacote <code>encoding/json</code> transforma uma struct em JSON (<code>Marshal</code>) e JSON em struct (<code>Unmarshal</code>). As <strong>tags</strong> entre crases dizem o nome de cada campo no JSON.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Gerar JSON com <code>json.Marshal</code> e <code>json.MarshalIndent</code>.</li><li>Controlar os nomes com tags: <code>`json:"nome"`</code>, <code>omitempty</code> e <code>"-"</code>.</li><li>Ler JSON com <code>json.Unmarshal</code> para struct ou <code>map[string]any</code>, e tratar JSON inválido.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. De struct para JSON</h2>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type Produto struct {
+	Nome     string   `json:"nome"`
+	Preco    float64  `json:"preco"`
+	Tags     []string `json:"tags,omitempty"`
+	Estoque  int      `json:"-"`
+	Destaque bool     `json:"destaque"`
+}
+
+func main() {
+	p := Produto{Nome: "Café", Preco: 18.9, Estoque: 3}
+	b, err := json.Marshal(p)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(string(b))
+
+	lista := []Produto{p, {Nome: "Pão", Preco: 0.75, Tags: []string{"padaria"}, Destaque: true}}
+	bonito, _ := json.MarshalIndent(lista, "", "  ")
+	fmt.Println(string(bonito))
+}</pre>
+<pre class="term" data-cwd="~/projetos/json">$ go run main.go
+{"nome":"Café","preco":18.9,"destaque":false}
+[
+  {
+    "nome": "Café",
+    "preco": 18.9,
+    "destaque": false
+  },
+  {
+    "nome": "Pão",
+    "preco": 0.75,
+    "tags": [
+      "padaria"
+    ],
+    "destaque": true
+  }
+]</pre>
+<dl class="anatomy"><dt>`json:"nome"`</dt><dd>a tag: no JSON o campo se chama <code>nome</code>.</dd><dt>omitempty</dt><dd>some do JSON quando está vazio (o <code>Café</code> não tem tags).</dd><dt>`json:"-"`</dt><dd>nunca entra no JSON (o <code>Estoque</code>).</dd></dl>
+<p>Só campos <strong>exportados</strong> (com maiúscula) entram no JSON. O <code>Marshal</code> devolve bytes: por isso o <code>string(b)</code>.</p>
+<hr>
+<h2>2. De JSON para struct (ou map)</h2>
+<p>O <code>Unmarshal</code> recebe os bytes e o <strong>endereço</strong> da variável. Campos do JSON que a struct não tem (<code>obs</code>) são ignorados. Num <code>map[string]any</code> cabe tudo, mas números viram <code>float64</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type Pedido struct {
+	ID      int      `json:"id"`
+	Cliente string   `json:"cliente"`
+	Itens   []string `json:"itens"`
+}
+
+func main() {
+	entrada := `{"id": 7, "cliente": "Ana", "itens": ["café", "pão"], "obs": "sem açúcar"}`
+	var p Pedido
+	if err := json.Unmarshal([]byte(entrada), &amp;p); err != nil {
+		fmt.Println("erro:", err)
+		return
+	}
+	fmt.Printf("%+v\n", p)
+
+	var solto map[string]any
+	json.Unmarshal([]byte(entrada), &amp;solto)
+	fmt.Println(solto["obs"], solto["id"])
+	fmt.Printf("%T\n", solto["id"])
+}</pre>
+<pre class="term" data-cwd="~/projetos/json2">$ go run main.go
+{ID:7 Cliente:Ana Itens:[café pão]}
+sem açúcar 7
+float64</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>JSON inválido ou do tipo errado</strong>
+<p>Uma vírgula sobrando e um texto onde se esperava número:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type Pedido struct {
+	ID int `json:"id"`
+}
+
+func main() {
+	var p Pedido
+	fmt.Println(json.Unmarshal([]byte(`{"id": 7,}`), &amp;p))
+	fmt.Println(json.Unmarshal([]byte(`{"id": "sete"}`), &amp;p))
+}</pre>
+<pre class="term" data-cwd="~/projetos/json-erro">$ go run main.go
+invalid character '}' looking for beginning of object key string
+json: cannot unmarshal string into Go struct field Pedido.id of type int</pre></div>
+<div class="cenario"><strong>Campo minúsculo some do JSON</strong>
+<p>Sem mensagem de erro: o campo <code>nome</code> não é exportado, e o <code>encoding/json</code> simplesmente não o vê:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type Pessoa struct {
+	nome  string
+	Idade int
+}
+
+func main() {
+	b, _ := json.Marshal(Pessoa{nome: "Ana", Idade: 30})
+	fmt.Println(string(b))
+}</pre>
+<pre class="term" data-cwd="~/projetos/json-minusc">$ go run main.go
+{"Idade":30}</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>b, err := json.Marshal(v)</code></td><td>Valor → JSON (bytes).</td></tr>
+<tr><td><code>json.MarshalIndent(v, "", "  ")</code></td><td>JSON identado.</td></tr>
+<tr><td><code>err := json.Unmarshal(b, &amp;v)</code></td><td>JSON → valor.</td></tr>
+<tr><td><code>`json:"nome,omitempty"`</code></td><td>Nome no JSON; some se vazio.</td></tr>
+<tr><td><code>`json:"-"`</code></td><td>Campo fora do JSON.</td></tr>
+<tr><td><code>map[string]any</code></td><td>JSON de formato desconhecido.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Gerar</h3><p>Complete:</p><div class="ex-code">b, err := json.<input data-answer="Marshal" aria-label="resposta">(produto)</div></div>
+
+<div class="exercise"><h3>2. Ler</h3><p>Complete:</p><div class="ex-code">err := json.Unmarshal(dados, <input data-answer="&amp;p" aria-label="resposta">)</div></div>
+
+<div class="exercise"><h3>3. Tag</h3><p>Complete a tag para o campo se chamar <code>email</code> e sumir quando vazio:</p><div class="ex-code">Email string `json:"email,<input data-answer="omitempty" aria-label="resposta">"`</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Por que o campo <code>nome</code> (minúsculo) não apareceu no JSON?</p>
+<label><input type="radio" name="q4"> Porque estava vazio</label>
+<label><input type="radio" name="q4"> Porque só campos exportados (maiúscula) entram no JSON</label>
+<label><input type="radio" name="q4"> Porque faltou <code>omitempty</code></label>
+<label><input type="radio" name="q4"> Bug do Go</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. Num <code>map[string]any</code>, o número <code>7</code> do JSON vira:</p>
+<label><input type="radio" name="q5"> <code>int</code></label>
+<label><input type="radio" name="q5"> <code>float64</code></label>
+<label><input type="radio" name="q5"> <code>string</code></label>
+<label><input type="radio" name="q5"> <code>json.Number</code> sempre</label></div>
+
+<div class="trycmd" data-goal="src:`json:&quot;nome&quot;`;;src:`json:&quot;email&quot;`;;out:{&quot;nome&quot;:&quot;Ana&quot;,&quot;email&quot;:&quot;ana@exemplo.com&quot;};;semerro">
+<p class="try-task"><strong>Missão:</strong> dê tags à struct <code>Usuario</code> para o JSON sair como <code>{"nome":"Ana","email":"ana@exemplo.com"}</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type Usuario struct {
+	Nome  string
+	Email string
+}
+
+func main() {
+	b, _ := json.Marshal(Usuario{"Ana", "ana@exemplo.com"})
+	fmt.Println(string(b))
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type Usuario struct {
+	Nome  string `json:"nome"`
+	Email string `json:"email"`
+}
+
+func main() {
+	b, _ := json.Marshal(Usuario{"Ana", "ana@exemplo.com"})
+	fmt.Println(string(b))
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+{"nome":"Ana","email":"ana@exemplo.com"}
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:json\.Unmarshal\(dados, &amp;l\);;out:Go tem 320 páginas;;semerro">
+<p class="try-task"><strong>Missão:</strong> leia o JSON <code>{"titulo": "Go", "paginas": 320}</code> para a struct <code>Livro</code> com <code>json.Unmarshal</code> e escreva <code>Go tem 320 páginas</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type Livro struct {
+	Titulo  string `json:"titulo"`
+	Paginas int    `json:"paginas"`
+}
+
+func main() {
+	dados := []byte(`{"titulo": "Go", "paginas": 320}`)
+	var l Livro
+	fmt.Println(dados, l)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type Livro struct {
+	Titulo  string `json:"titulo"`
+	Paginas int    `json:"paginas"`
+}
+
+func main() {
+	dados := []byte(`{"titulo": "Go", "paginas": 320}`)
+	var l Livro
+	if err := json.Unmarshal(dados, &amp;l); err != nil {
+		fmt.Println("erro:", err)
+		return
+	}
+	fmt.Println(l.Titulo, "tem", l.Paginas, "páginas")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Go tem 320 páginas
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>json.Marshal</code> gera JSON; <code>json.Unmarshal</code> lê (passe o endereço).</li>
+<li>Tags controlam os nomes; <code>omitempty</code> e <code>"-"</code> tiram campos.</li>
+<li>Só campos exportados entram no JSON; confira o <code>err</code> do <code>Unmarshal</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

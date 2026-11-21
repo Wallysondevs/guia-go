@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Testes em Go — go test, arquivos _test.go e t.Errorf | Guia Go</title>
+<meta name="description" content="Testes automáticos em Go: arquivos _test.go, funções TestXxx(t *testing.T), t.Errorf e t.Fatalf, go test, -v e -run, e como ler um teste que falhou.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Testes (<span class="hl">go test</span>)</h1>
+
+<p class="intro">Um teste é um programa que confere outro programa. Em Go isso vem de fábrica: escreva funções <code>TestAlgo</code> num arquivo terminado em <code>_test.go</code> e rode <code>go test</code>. Sem bibliotecas extras, sem configuração.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>As regras: arquivo <code>_test.go</code>, função <code>func TestXxx(t *testing.T)</code>.</li><li>Avisar falhas com <code>t.Errorf</code> (continua) e <code>t.Fatalf</code> (para o teste).</li><li>Rodar com <code>go test</code>, <code>-v</code> e <code>-run</code>, e ler a saída de uma falha.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. O código e o teste</h2>
+<p>O pacote <code>calc</code>, num módulo de mesmo nome, tem duas funções. O teste fica ao lado, em <code>calc_test.go</code>, no mesmo pacote:</p>
+<pre class="file" data-file="calc.go">package calc
+
+// Soma devolve a soma de todos os números.
+func Soma(nums ...int) int {
+	total := 0
+	for _, n := range nums {
+		total += n
+	}
+	return total
+}
+
+// Media devolve a média; com lista vazia, devolve 0.
+func Media(nums ...int) float64 {
+	if len(nums) == 0 {
+		return 0
+	}
+	return float64(Soma(nums...)) / float64(len(nums))
+}</pre>
+<pre class="file" data-file="calc_test.go">package calc
+
+import "testing"
+
+func TestSoma(t *testing.T) {
+	got := Soma(1, 2, 3)
+	want := 6
+	if got != want {
+		t.Errorf("Soma(1, 2, 3) = %d; queria %d", got, want)
+	}
+}
+
+func TestMedia(t *testing.T) {
+	if got := Media(2, 4); got != 3 {
+		t.Errorf("Media(2, 4) = %v; queria 3", got)
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/calc">$ go test
+PASS
+ok  	calc	0.001s
+$ go test -v
+=== RUN   TestSoma
+--- PASS: TestSoma (0.00s)
+=== RUN   TestMedia
+--- PASS: TestMedia (0.00s)
+PASS
+ok  	calc	0.002s
+$ go test -run Media -v
+=== RUN   TestMedia
+--- PASS: TestMedia (0.00s)
+PASS
+ok  	calc	0.002s</pre>
+<dl class="anatomy"><dt>calc_test.go</dt><dd>só arquivos <code>_test.go</code> são lidos pelo <code>go test</code> (e ficam fora do executável).</dd><dt>func TestSoma</dt><dd>começa com <code>Test</code> e uma maiúscula.</dd><dt>t *testing.T</dt><dd>o “caderno” do teste: é por ele que você avisa as falhas.</dd><dt>t.Errorf(…)</dt><dd>marca o teste como falho, com a mensagem, e continua.</dd></dl>
+<p>Quando tudo passa, o <code>go test</code> mostra uma linha só: <code>ok</code>, o pacote e o tempo. Com <code>-v</code> (de <em>verbose</em>) ele mostra cada teste, e com <code>-run</code> roda só os testes cujo nome casa com o padrão.</p>
+<hr>
+<h2>2. Quando um teste falha</h2>
+<p>Agora o <code>Media</code> tem um defeito: divide por <code>len(nums)+1</code>. O teste pega:</p>
+<pre class="term" data-cwd="~/projetos/calc-bug">$ go test
+--- FAIL: TestMedia (0.00s)
+    calc_test.go:15: Media(2, 4) = 2; queria 3
+FAIL
+exit status 1
+FAIL	calc	0.002s</pre>
+<p>A saída diz o arquivo e a linha do <code>t.Errorf</code> (<code>calc_test.go:15</code>), a mensagem que você escreveu e, no fim, <code>FAIL</code>. Por isso vale escrever mensagens no formato “recebi X; queria Y”.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Teste com nome minúsculo não roda</strong>
+<p><code>testSoma</code> não começa com <code>Test</code> maiúsculo, então o <code>go test</code> nem o vê: avisa <code>no tests to run</code> e, mesmo assim, termina com <code>ok</code>. O <code>go vet</code> também ficou calado. Por isso vale rodar com <code>-v</code> e conferir se o seu teste aparece na lista.</p>
+<pre class="file" data-file="calc_test.go">package calc
+
+import "testing"
+
+func testSoma(t *testing.T) {
+	if Soma(1, 1) != 2 {
+		t.Error("errado")
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/calc-nome">$ go test -v
+testing: warning: no tests to run
+PASS
+ok  	calc	0.002s
+$ go vet</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>arquivo_test.go</code></td><td>Onde ficam os testes.</td></tr>
+<tr><td><code>func TestX(t *testing.T)</code></td><td>Uma função de teste.</td></tr>
+<tr><td><code>t.Errorf("…")</code> / <code>t.Fatalf("…")</code></td><td>Falha e continua / falha e para.</td></tr>
+<tr><td><code>go test</code>, <code>go test -v</code></td><td>Roda os testes; <code>-v</code> mostra cada um.</td></tr>
+<tr><td><code>go test -run Nome</code></td><td>Roda só os testes que casam com o nome.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. O arquivo</h3><p>Complete o nome do arquivo de testes de <code>calc.go</code>:</p><div class="ex-code">calc<input data-answer="_test" aria-label="resposta">.go</div></div>
+
+<div class="exercise"><h3>2. A assinatura</h3><p>Complete:</p><div class="ex-code">func TestSoma(t <input data-answer="*testing.T" aria-label="resposta">) {</div></div>
+
+<div class="exercise"><h3>3. Detalhado</h3><p>Complete para ver cada teste:</p><div class="ex-code">go test <input data-answer="-v" aria-label="resposta"></div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Qual a diferença entre <code>t.Errorf</code> e <code>t.Fatalf</code>?</p>
+<label><input type="radio" name="q4"> Nenhuma</label>
+<label><input type="radio" name="q4"> <code>Errorf</code> marca a falha e continua; <code>Fatalf</code> marca e para o teste</label>
+<label><input type="radio" name="q4"> <code>Fatalf</code> só escreve</label>
+<label><input type="radio" name="q4"> <code>Errorf</code> para o programa inteiro</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. Por que <code>func testSoma(t *testing.T)</code> não rodou?</p>
+<label><input type="radio" name="q5"> Faltou o <code>-v</code></label>
+<label><input type="radio" name="q5"> O nome precisa começar com <code>Test</code> maiúsculo</label>
+<label><input type="radio" name="q5"> Faltou <code>return</code></label>
+<label><input type="radio" name="q5"> O arquivo não termina em .go</label></div>
+
+<p>Arquivo de apoio desta missão, <code>calc.go</code> (crie junto com o <code>calc_test.go</code>):</p>
+<pre class="file" data-file="calc.go">package calc
+
+// Soma devolve a soma de todos os números.
+func Soma(nums ...int) int {
+	total := 0
+	for _, n := range nums {
+		total += n
+	}
+	return total
+}
+
+// Media devolve a média; com lista vazia, devolve 0.
+func Media(nums ...int) float64 {
+	if len(nums) == 0 {
+		return 0
+	}
+	return float64(Soma(nums...)) / float64(len(nums))
+}</pre>
+<div class="trycmd" data-goal="src:func TestSomaVazia\(t \*testing\.T\);;out:--- PASS: TestSomaVazia;;semerro">
+<p class="try-task"><strong>Missão:</strong> escreva <code>calc_test.go</code> com a função <code>TestSomaVazia</code>, que confere se <code>Soma()</code> (sem números) devolve 0. Rode com <code>go test -v</code> no módulo <code>calc</code> (arquivos de apoio acima). A saída deve ter <code>--- PASS: TestSomaVazia</code>.</p>
+<pre class="script" data-file="calc_test.go" data-cmd="go test -v">
+package calc
+
+// escreva TestSomaVazia aqui
+</pre>
+<pre class="solucao" data-file="calc_test.go">
+package calc
+
+import "testing"
+
+func TestSomaVazia(t *testing.T) {
+	if got := Soma(); got != 0 {
+		t.Errorf("Soma() = %d; queria 0", got)
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="calc_test.go" hidden>
+=== RUN   TestSomaVazia
+--- PASS: TestSomaVazia (0.00s)
+PASS
+ok  	calc	0.002s
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Testes ficam em <code>_test.go</code>, em funções <code>TestXxx(t *testing.T)</code>.</li>
+<li><code>t.Errorf</code> marca falha; a saída mostra arquivo, linha e mensagem.</li>
+<li><code>go test</code>, <code>-v</code> e <code>-run</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

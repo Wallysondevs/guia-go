@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tabela de testes em Go — casos em slice de struct, t.Run e cobertura | Guia Go</title>
+<meta name="description" content="O padrão de tabela de testes em Go: casos num slice de struct, subtestes com t.Run, rodar um caso com -run e medir cobertura com -cover.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Tabela de <span class="hl">testes</span></h1>
+
+<p class="intro">Testar uma função com dez entradas diferentes não pede dez funções de teste. O jeito Go é a <strong>tabela de testes</strong>: uma lista de casos (entrada e resultado esperado) e um laço que confere cada um, com <code>t.Run</code> dando nome a cada caso.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Montar os casos num <code>[]struct{…}</code> e percorrer com <code>for</code>.</li><li>Criar subtestes com <code>t.Run(nome, …)</code> e rodar um só com <code>-run</code>.</li><li>Medir quanto do código os testes cobrem com <code>go test -cover</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. A tabela</h2>
+<p>Usando o mesmo pacote <code>calc</code> da aula <a href="go-test.html">go test</a>:</p>
+<pre class="file" data-file="calc_test.go">package calc
+
+import "testing"
+
+func TestMediaTabela(t *testing.T) {
+	casos := []struct {
+		nome string
+		nums []int
+		want float64
+	}{
+		{"vazia", nil, 0},
+		{"um número", []int{5}, 5},
+		{"pares", []int{2, 4}, 3},
+		{"com fração", []int{1, 2}, 1.5},
+	}
+	for _, c := range casos {
+		t.Run(c.nome, func(t *testing.T) {
+			if got := Media(c.nums...); got != c.want {
+				t.Errorf("Media(%v) = %v; queria %v", c.nums, got, c.want)
+			}
+		})
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/calc-tab">$ go test -v
+=== RUN   TestMediaTabela
+=== RUN   TestMediaTabela/vazia
+=== RUN   TestMediaTabela/um_número
+=== RUN   TestMediaTabela/pares
+=== RUN   TestMediaTabela/com_fração
+--- PASS: TestMediaTabela (0.00s)
+    --- PASS: TestMediaTabela/vazia (0.00s)
+    --- PASS: TestMediaTabela/um_número (0.00s)
+    --- PASS: TestMediaTabela/pares (0.00s)
+    --- PASS: TestMediaTabela/com_fração (0.00s)
+PASS
+ok  	calc	0.002s</pre>
+<dl class="anatomy"><dt>casos := []struct{…}</dt><dd>a tabela: cada linha é um caso.</dd><dt>t.Run(c.nome, …)</dt><dd>roda o caso como um subteste com nome próprio.</dd><dt>TestMediaTabela/pares</dt><dd>o nome completo do subteste (espaços viram <code>_</code>).</dd></dl>
+<hr>
+<h2>2. Um caso só e a cobertura</h2>
+<p>O <code>-run</code> aceita <code>Teste/subteste</code>. E o <code>-cover</code> diz qual porcentagem das linhas do pacote os testes fizeram rodar:</p>
+<pre class="term" data-cwd="~/projetos/calc-tab">$ go test -run 'TestMediaTabela/pares' -v
+=== RUN   TestMediaTabela
+=== RUN   TestMediaTabela/pares
+--- PASS: TestMediaTabela (0.00s)
+    --- PASS: TestMediaTabela/pares (0.00s)
+PASS
+ok  	calc	0.002s
+$ go test -cover
+PASS
+coverage: 100.0% of statements
+ok  	calc	0.002s</pre>
+<p>Deu 100%: a tabela chama <code>Media</code> com lista vazia (passa pelo <code>if</code>) e com números (passa pela conta, que chama <code>Soma</code>). Se você apagar o caso <code>vazia</code>, a linha do <code>return 0</code> deixa de rodar e a cobertura cai.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Um caso quebra, os outros continuam</strong>
+<p>Tirando do <code>Media</code> o cuidado com a lista vazia, a divisão vira 0/0, que em <code>float64</code> dá <code>NaN</code> (“não é um número”). Só o caso <code>vazia</code> falha, e a saída diz qual:</p>
+<pre class="term" data-cwd="~/projetos/calc-tab-bug">$ go test
+--- FAIL: TestMediaTabela (0.00s)
+    --- FAIL: TestMediaTabela/vazia (0.00s)
+        calc_test.go:19: Media([]) = NaN; queria 0
+FAIL
+exit status 1
+FAIL	calc	0.002s</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>casos := []struct{ … }{ {…}, {…} }</code></td><td>A tabela de casos.</td></tr>
+<tr><td><code>for _, c := range casos { t.Run(c.nome, …) }</code></td><td>Um subteste por caso.</td></tr>
+<tr><td><code>go test -run 'Teste/caso'</code></td><td>Roda um subteste.</td></tr>
+<tr><td><code>go test -cover</code></td><td>Mostra a cobertura.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Subteste</h3><p>Complete:</p><div class="ex-code">t.<input data-answer="Run" aria-label="resposta">(c.nome, func(t *testing.T) {</div></div>
+
+<div class="exercise"><h3>2. Cobertura</h3><p>Complete:</p><div class="ex-code">go test <input data-answer="-cover" aria-label="resposta"></div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. Qual a vantagem da tabela de testes?</p>
+<label><input type="radio" name="q3"> Deixa os testes mais lentos</label>
+<label><input type="radio" name="q3"> Acrescentar um caso é só uma linha a mais na tabela</label>
+<label><input type="radio" name="q3"> Dispensa o <code>go test</code></label>
+<label><input type="radio" name="q3"> Esconde as falhas</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Como o <code>go test</code> nomeia o subteste <code>"um número"</code> de <code>TestMediaTabela</code>?</p>
+<label><input type="radio" name="q4"> <code>um número</code></label>
+<label><input type="radio" name="q4"> <code>TestMediaTabela/um_número</code></label>
+<label><input type="radio" name="q4"> <code>TestMediaTabela.1</code></label>
+<label><input type="radio" name="q4"> <code>Test_um_numero</code></label></div>
+
+<p>Arquivo de apoio desta missão, <code>calc.go</code> (crie junto com o <code>calc_test.go</code>):</p>
+<pre class="file" data-file="calc.go">package calc
+
+// Soma devolve a soma de todos os números.
+func Soma(nums ...int) int {
+	total := 0
+	for _, n := range nums {
+		total += n
+	}
+	return total
+}
+
+// Media devolve a média; com lista vazia, devolve 0.
+func Media(nums ...int) float64 {
+	if len(nums) == 0 {
+		return 0
+	}
+	return float64(Soma(nums...)) / float64(len(nums))
+}</pre>
+<div class="trycmd" data-goal="src:\{&quot;três&quot;, \[\]int\{1, 2, 3\}, 6\};;out:--- PASS: TestSomaTabela/três;;semerro">
+<p class="try-task"><strong>Missão:</strong> complete a tabela de <code>TestSomaTabela</code> com os casos <code>{"zero", nil, 0}</code> e <code>{"três", []int{1, 2, 3}, 6}</code>, e rode <code>go test -v</code>. A saída deve ter <code>--- PASS: TestSomaTabela/três</code>.</p>
+<pre class="script" data-file="calc_test.go" data-cmd="go test -v">
+package calc
+
+import "testing"
+
+func TestSomaTabela(t *testing.T) {
+	casos := []struct {
+		nome string
+		nums []int
+		want int
+	}{
+		// ponha os casos aqui
+	}
+	for _, c := range casos {
+		t.Run(c.nome, func(t *testing.T) {
+			if got := Soma(c.nums...); got != c.want {
+				t.Errorf("Soma(%v) = %d; queria %d", c.nums, got, c.want)
+			}
+		})
+	}
+}
+</pre>
+<pre class="solucao" data-file="calc_test.go">
+package calc
+
+import "testing"
+
+func TestSomaTabela(t *testing.T) {
+	casos := []struct {
+		nome string
+		nums []int
+		want int
+	}{
+		{"zero", nil, 0},
+		{"três", []int{1, 2, 3}, 6},
+	}
+	for _, c := range casos {
+		t.Run(c.nome, func(t *testing.T) {
+			if got := Soma(c.nums...); got != c.want {
+				t.Errorf("Soma(%v) = %d; queria %d", c.nums, got, c.want)
+			}
+		})
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="calc_test.go" hidden>
+=== RUN   TestSomaTabela
+=== RUN   TestSomaTabela/zero
+=== RUN   TestSomaTabela/três
+--- PASS: TestSomaTabela (0.00s)
+    --- PASS: TestSomaTabela/zero (0.00s)
+    --- PASS: TestSomaTabela/três (0.00s)
+PASS
+ok  	calc	0.002s
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Casos num slice de struct, conferidos num laço.</li>
+<li><code>t.Run</code> dá nome a cada caso; <code>-run 'Teste/caso'</code> roda um só.</li>
+<li><code>go test -cover</code> mede a cobertura.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
