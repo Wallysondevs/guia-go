@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>context em Go — WithTimeout, WithCancel, Done e Err | Guia Go</title>
+<meta name="description" content="O pacote context de Go com saída real: prazo com WithTimeout, cancelamento com WithCancel, ctx.Done(), ctx.Err() e as mensagens context deadline exceeded e context canceled.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">context</span></h1>
+
+<p class="intro">O pacote <code>context</code> leva um recado “pode parar” para todas as goroutines de uma tarefa. Esse recado pode vir de um prazo (“no máximo 200 ms”) ou de um cancelamento manual. Servidores HTTP, bancos de dados e clientes de rede da biblioteca padrão aceitam um <code>context.Context</code> justamente para isso.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Criar um contexto com prazo, <code>context.WithTimeout</code>, e com cancelamento, <code>context.WithCancel</code>.</li><li>Ouvir o recado com <code>&lt;-ctx.Done()</code> e ler o motivo com <code>ctx.Err()</code>.</li><li>As duas mensagens reais: <code>context deadline exceeded</code> e <code>context canceled</code>.</li><li>Por que sempre chamar <code>cancel()</code>, de preferência com <code>defer</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), dentro de <code>~/projetos/go-nivel3</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. Os tempos medidos variam um pouco a cada execução; por isso os exemplos mostram comparações (<code>true</code>/<code>false</code>) em vez de milissegundos exatos. As mensagens do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída.</div>
+
+<hr>
+<h2>A ideia: um apito para todo mundo parar</h2>
+<p>Pense num juiz com um apito. Quando ele apita (prazo esgotado ou cancelamento), todos os jogadores que estão ouvindo param. O <code>ctx.Done()</code> é o ouvido: um canal que se fecha quando o apito soa.</p>
+
+<hr>
+<h2>1. Prazo com <code>WithTimeout</code></h2>
+<p>Um trabalho que levaria 2 segundos, mas com prazo de 200 ms. A função escuta os dois canais com <a href="select.html">select</a>:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func trabalhoLento(ctx context.Context) error {
+	select {
+	case &lt;-time.After(2 * time.Second):
+		return nil
+	case &lt;-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	inicio := time.Now()
+	err := trabalhoLento(ctx)
+	fmt.Println("erro:", err)
+	fmt.Println("demorou menos de 1s:", time.Since(inicio) &lt; time.Second)
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/context/timeout">$ go run .
+erro: context deadline exceeded
+demorou menos de 1s: true</pre>
+<p>O prazo venceu primeiro, o <code>ctx.Done()</code> fechou e <code>ctx.Err()</code> explicou o motivo: <code>context deadline exceeded</code> (prazo do contexto excedido). O programa não esperou os 2 segundos.</p>
+<dl class="anatomy"><dt>context.Background()</dt><dd>o contexto vazio, raiz de todos os outros.</dd><dt>WithTimeout(pai, 200*time.Millisecond)</dt><dd>cria um filho que “apita” sozinho depois de 200 ms.</dd><dt>cancel</dt><dd>função que apita na hora e libera os recursos do contexto.</dd><dt>defer cancel()</dt><dd>garante que o <code>cancel</code> é chamado quando a função terminar.</dd></dl>
+
+<hr>
+<h2>2. Cancelamento manual com <code>WithCancel</code></h2>
+<p>Aqui uma goroutine “vigia” trabalha em voltas de 50 ms até o <code>main</code> chamar <code>cancel()</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func vigia(ctx context.Context, fim chan&lt;- string) {
+	for {
+		select {
+		case &lt;-ctx.Done():
+			fim &lt;- "vigia parou: " + ctx.Err().Error()
+			return
+		default:
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+}
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	fim := make(chan string)
+	go vigia(ctx, fim)
+
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+	fmt.Println(&lt;-fim)
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/context/cancel">$ go run .
+vigia parou: context canceled</pre>
+<p>Depois do <code>cancel()</code>, o <code>ctx.Done()</code> fechou, o <code>select</code> da vigia caiu nesse <code>case</code> e ela saiu, avisando pelo canal <code>fim</code>. O motivo agora é <code>context canceled</code>.</p>
+
+<hr>
+<h2>3. Conferindo o motivo com <code>errors.Is</code></h2>
+<p><code>ctx.Err()</code> devolve um de dois erros prontos do pacote: <code>context.DeadlineExceeded</code> ou <code>context.Canceled</code>. Compare com <code>errors.Is</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	&lt;-ctx.Done()
+	fmt.Println(ctx.Err())
+	fmt.Println(errors.Is(ctx.Err(), context.DeadlineExceeded))
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	cancel2()
+	fmt.Println(ctx2.Err())
+	fmt.Println(errors.Is(ctx2.Err(), context.Canceled))
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/context/valor">$ go run .
+context deadline exceeded
+true
+context canceled
+true</pre>
+<p>Antes de o contexto terminar, <code>ctx.Err()</code> devolve <code>nil</code>. Por isso o padrão é sempre esperar o <code>Done()</code> (ou checar o <code>Err()</code>) antes de decidir.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Esquecer o <code>cancel</code></strong>
+<p>O <code>WithTimeout</code> e o <code>WithCancel</code> devolvem um <code>cancel</code> que precisa ser chamado, senão os recursos do contexto ficam presos até o prazo. O <a href="vet-e-gofmt.html"><code>go vet</code></a> avisa quando o <code>cancel</code> é jogado fora com <code>_</code>. O programa abaixo compila e roda, mas o <code>go vet</code> reclama:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func main() {
+	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	fmt.Println(ctx.Err())
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/context/lostcancel">$ go vet .
+main.go:10:7: the cancel function returned by context.WithTimeout should be called, not discarded, to avoid a context leak</pre>
+<p>A correção é guardar o <code>cancel</code> e escrever <code>defer cancel()</code> logo na linha de baixo.</p></div>
+<div class="cenario"><strong>A goroutine que não escuta</strong>
+<p>O contexto não “mata” ninguém: ele só fecha o canal <code>Done()</code>. Se a goroutine nunca olha para o <code>ctx.Done()</code>, ela continua rodando. Toda função demorada que recebe um <code>ctx</code> precisa checá-lo.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>context.Background()</code></td><td>Contexto raiz, vazio.</td></tr>
+<tr><td><code>ctx, cancel := context.WithTimeout(pai, d)</code></td><td>Filho que termina sozinho depois de <code>d</code>.</td></tr>
+<tr><td><code>ctx, cancel := context.WithCancel(pai)</code></td><td>Filho que termina quando você chamar <code>cancel()</code>.</td></tr>
+<tr><td><code>defer cancel()</code></td><td>Libera o contexto quando a função termina.</td></tr>
+<tr><td><code>&lt;-ctx.Done()</code></td><td>Canal que fecha quando o contexto termina.</td></tr>
+<tr><td><code>ctx.Err()</code></td><td><code>nil</code>, <code>context deadline exceeded</code> ou <code>context canceled</code>.</td></tr>
+<tr><td><code>func f(ctx context.Context, …)</code></td><td>Convenção: o contexto é o primeiro parâmetro.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+<div class="exercise"><h3>1. Prazo</h3><p>Complete para criar um contexto que termina sozinho depois de 1 segundo:</p><div class="ex-code">ctx, cancel := context.<input data-answer="WithTimeout" aria-label="resposta">(context.Background(), time.Second)</div></div>
+<div class="exercise"><h3>2. Não esqueça</h3><p>Complete a linha que libera o contexto no fim da função:</p><div class="ex-code"><input data-answer="defer" aria-label="resposta"> cancel()</div></div>
+<div class="exercise"><h3>3. O canal do apito</h3><p>Qual método devolve o canal que fecha quando o contexto termina?</p><div class="ex-code">&lt;-ctx.<input data-answer="Done" aria-label="resposta">()</div></div>
+<div class="mc" data-answer="2"><p class="mc-q">4. Qual mensagem <code>ctx.Err()</code> mostrou quando o prazo de 200 ms venceu?</p>
+<label><input type="radio" name="q4"> <code>context canceled</code></label>
+<label><input type="radio" name="q4"> <code>context deadline exceeded</code></label>
+<label><input type="radio" name="q4"> <code>timeout</code></label>
+<label><input type="radio" name="q4"> <code>nil</code></label></div>
+<div class="mc" data-answer="2"><p class="mc-q">5. O que acontece com uma goroutine que nunca olha para <code>ctx.Done()</code> quando o contexto é cancelado?</p>
+<label><input type="radio" name="q5"> Ela é encerrada à força pelo Go</label>
+<label><input type="radio" name="q5"> Ela continua rodando: o contexto só avisa, não mata</label>
+<label><input type="radio" name="q5"> O programa dá <code>panic</code></label>
+<label><input type="radio" name="q5"> Ela volta para o início</label></div>
+<div class="mc" data-answer="3"><p class="mc-q">6. Antes de o contexto terminar, o que <code>ctx.Err()</code> devolve?</p>
+<label><input type="radio" name="q6"> <code>context canceled</code></label>
+<label><input type="radio" name="q6"> Um erro qualquer</label>
+<label><input type="radio" name="q6"> <code>nil</code></label>
+<label><input type="radio" name="q6"> Trava até terminar</label></div>
+
+<div class="trycmd" data-goal="src:context\.WithTimeout\(;;src:defer cancel\(\);;out:parou: context deadline exceeded;;semerro">
+<p class="try-task"><strong>Missão:</strong> troque o <code>context.Background()</code> por um contexto com prazo de 50 ms (<code>context.WithTimeout</code>), com <code>defer cancel()</code>. O trabalho leva 1 segundo, então o programa deve mostrar o motivo da parada.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func main() {
+	ctx := context.Background() // troque por um contexto com prazo de 50ms
+
+	select {
+	case &lt;-time.After(time.Second):
+		fmt.Println("terminou o trabalho")
+	case &lt;-ctx.Done():
+		fmt.Println("parou:", ctx.Err())
+	}
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	select {
+	case &lt;-time.After(time.Second):
+		fmt.Println("terminou o trabalho")
+	case &lt;-ctx.Done():
+		fmt.Println("parou:", ctx.Err())
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+parou: context deadline exceeded
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:\n\s*cancel\(\);;out:estado: context canceled;;semerro">
+<p class="try-task"><strong>Missão:</strong> chame <code>cancel()</code> (numa linha própria, não só no <code>defer</code>) e espere o <code>&lt;-ctx.Done()</code> antes do <code>Println</code>. Do jeito que está, o programa mostra <code>estado: &lt;nil&gt;</code> (rodamos para conferir); com a correção, mostra o motivo do cancelamento.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"context"
+	"fmt"
+)
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// cancele o contexto antes de esperar por ele
+	fmt.Println("estado:", ctx.Err())
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"context"
+	"fmt"
+)
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	&lt;-ctx.Done()
+	fmt.Println("estado:", ctx.Err())
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+estado: context canceled
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>WithTimeout</code> termina sozinho; <code>WithCancel</code> termina quando você chama <code>cancel()</code>.</li>
+<li>Quem trabalha escuta <code>&lt;-ctx.Done()</code> e lê o motivo em <code>ctx.Err()</code>.</li>
+<li>As mensagens reais são <code>context deadline exceeded</code> e <code>context canceled</code>.</li>
+<li>Sempre <code>defer cancel()</code>, e o contexto vai como primeiro parâmetro das funções.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

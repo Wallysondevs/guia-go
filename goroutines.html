@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Goroutines em Go — go, função anônima e por que o main não espera | Guia Go</title>
+<meta name="description" content="Goroutines em Go com saída real: go f(), go func(){}(), o main que termina antes, a ordem que muda a cada execução e runtime.NumGoroutine.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Goroutines</span></h1>
+
+<p class="intro">Uma goroutine é uma função rodando “ao lado” do resto do programa. Basta escrever <code>go</code> antes da chamada. Elas são leves (dá para ter milhares) e são a base de toda a concorrência em Go. Nesta aula você vê o detalhe que mais pega quem começa: o programa não espera as goroutines por conta própria.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Como iniciar uma goroutine com <code>go funcao()</code> e com <code>go func() { … }()</code>.</li><li>Por que o <code>main</code> pode terminar antes da goroutine, e a saída sumir.</li><li>Por que a ordem das linhas muda de uma execução para outra.</li><li>Como contar goroutines com <code>runtime.NumGoroutine</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), dentro de <code>~/projetos/go-nivel3</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. Em concorrência, a <strong>ordem</strong> das linhas pode mudar a cada execução e de um computador para outro: o que aparece aqui é uma das ordens possíveis, colhida de verdade. As mensagens do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída.</div>
+
+<hr>
+<h2>A ideia: cozinhar várias coisas ao mesmo tempo</h2>
+<p>Pense numa cozinha. O <code>main</code> é você. Cada <code>go</code> é um ajudante que começa uma tarefa e segue sozinho. Se você fecha a cozinha (o <code>main</code> termina), todos os ajudantes vão embora no mesmo instante, tenham terminado ou não.</p>
+
+<hr>
+<h2>1. A primeira goroutine (e o susto)</h2>
+<p>Coloque <code>go</code> antes da chamada de <code>diga</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func diga(msg string) {
+	fmt.Println(msg)
+}
+
+func main() {
+	go diga("olá da goroutine")
+	fmt.Println("fim do main")
+}</pre>
+<p>Rodamos três vezes. Nas três, só apareceu a linha do <code>main</code>:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/goroutines/sem-espera">$ go run .
+fim do main
+$ go run .
+fim do main
+$ go run .
+fim do main</pre>
+<p>O <code>go diga(…)</code> não espera nada: ele agenda a função e volta na hora. O <code>main</code> escreve <code>fim do main</code> e termina. Quando o <code>main</code> termina, o programa inteiro acaba, e a goroutine não teve tempo de escrever.</p>
+
+<hr>
+<h2>2. Dando tempo com <code>time.Sleep</code></h2>
+<p>O jeito mais simples (e mais tosco) de ver a goroutine trabalhar é fazer o <code>main</code> dormir um pouco:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func diga(msg string) {
+	fmt.Println(msg)
+}
+
+func main() {
+	go diga("olá da goroutine")
+	time.Sleep(100 * time.Millisecond)
+	fmt.Println("fim do main")
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/goroutines/com-sleep">$ go run .
+olá da goroutine
+fim do main</pre>
+<div class="warning"><strong>Sleep não é sincronização</strong><p>O <code>time.Sleep</code> aqui só serve para a aula. Ele “chuta” um tempo: se a goroutine demorar mais que isso, a saída some de novo. O jeito certo de esperar é com <a href="channels.html">channels</a> ou com <a href="sync.html">sync.WaitGroup</a>, que você vê nas próximas aulas.</p></div>
+
+<hr>
+<h2>3. Várias goroutines: a ordem muda</h2>
+<p>Agora cinco goroutines, cada uma escrevendo o seu número. Usamos uma função anônima, <code>go func() { … }()</code>; os parênteses do fim chamam a função:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	for i := 1; i &lt;= 5; i++ {
+		go func() {
+			fmt.Println("goroutine", i)
+		}()
+	}
+	time.Sleep(100 * time.Millisecond)
+	fmt.Println("fim do main")
+}</pre>
+<p>Três execuções seguidas, três ordens diferentes:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/goroutines/ordem">$ go run .
+goroutine 5
+goroutine 1
+goroutine 2
+goroutine 3
+goroutine 4
+fim do main
+$ go run .
+goroutine 5
+goroutine 4
+goroutine 2
+goroutine 3
+goroutine 1
+fim do main
+$ go run .
+goroutine 5
+goroutine 2
+goroutine 3
+goroutine 4
+goroutine 1
+fim do main</pre>
+<p>Quem decide a ordem é o <em>escalonador</em> do Go, que distribui as goroutines entre os núcleos do processador. Repare que o <code>5</code> saiu primeiro nas três vezes: a última goroutine criada costuma ser a próxima a rodar. Isso é um detalhe interno, não uma promessa. <strong>Nunca escreva código que dependa da ordem das goroutines.</strong></p>
+<div class="tip"><strong>Cada volta tem o seu <code>i</code></strong><p>Desde o Go 1.22, cada volta do <code>for</code> cria uma variável <code>i</code> nova. Por isso cada goroutine viu o seu próprio número (1 a 5). Em versões antigas, todas podiam ver o mesmo valor final. Se você ler código antigo com <code>i := i</code> dentro do <code>for</code>, era para evitar esse problema.</p></div>
+
+<hr>
+<h2>4. Contando goroutines</h2>
+<p>O pacote <code>runtime</code> mostra quantos núcleos o Go enxerga e quantas goroutines existem agora. O próprio <code>main</code> já é uma goroutine:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"runtime"
+	"time"
+)
+
+func main() {
+	fmt.Println("CPUs:", runtime.NumCPU())
+	fmt.Println("goroutines no início:", runtime.NumGoroutine())
+	for i := 0; i &lt; 3; i++ {
+		go time.Sleep(time.Second)
+	}
+	fmt.Println("goroutines depois do go:", runtime.NumGoroutine())
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/goroutines/contar">$ go run .
+CPUs: 8
+goroutines no início: 1
+goroutines depois do go: 4</pre>
+<p>Começa com 1 (o <code>main</code>). Depois de três <code>go time.Sleep(…)</code>, são 4. O número de CPUs depende do seu computador: aqui eram 8.</p>
+<dl class="anatomy"><dt>go</dt><dd>palavra-chave que inicia a chamada numa goroutine nova e volta na hora, sem esperar.</dd><dt>func() { … }</dt><dd>uma função anônima, sem nome, escrita ali mesmo.</dd><dt>()</dt><dd>os parênteses do fim chamam a função. Sem eles, o Go reclama.</dd></dl>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>A saída da goroutine “sumiu”</strong>
+<p>É o caso da seção 1: o <code>main</code> terminou primeiro. Não há mensagem de erro, a linha simplesmente não aparece. A correção é fazer o <code>main</code> esperar, com channel ou <code>WaitGroup</code>.</p></div>
+<div class="cenario"><strong>Ordem diferente da do livro</strong>
+<p>Se as suas linhas saírem em outra ordem que a desta página, está tudo certo: em concorrência isso é normal. Por isso as missões abaixo conferem <em>se</em> cada linha apareceu, e não em que ordem.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>go f(x)</code></td><td>Roda <code>f(x)</code> numa goroutine nova e segue sem esperar.</td></tr>
+<tr><td><code>go func() { … }()</code></td><td>Roda uma função anônima numa goroutine.</td></tr>
+<tr><td><code>time.Sleep(d)</code></td><td>Pausa a goroutine atual. Só para testes, não para sincronizar.</td></tr>
+<tr><td><code>runtime.NumGoroutine()</code></td><td>Quantas goroutines existem agora (o <code>main</code> conta).</td></tr>
+<tr><td><code>runtime.NumCPU()</code></td><td>Quantos núcleos o Go enxerga.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+<div class="exercise"><h3>1. Inicie a goroutine</h3><p>Complete para rodar <code>baixar()</code> numa goroutine:</p><div class="ex-code"><input data-answer="go" aria-label="resposta"> baixar()</div></div>
+<div class="exercise"><h3>2. Função anônima</h3><p>Complete para chamar a função anônima na hora:</p><div class="ex-code">go func() { fmt.Println("oi") }<input data-answer="()" aria-label="parênteses"></div></div>
+<div class="exercise"><h3>3. Contando</h3><p>Qual função do pacote <code>runtime</code> diz quantas goroutines existem?</p><div class="ex-code">runtime.<input data-answer="NumGoroutine" aria-label="resposta">()</div></div>
+<div class="mc" data-answer="2"><p class="mc-q">4. No programa da seção 1, por que só apareceu <code>fim do main</code>?</p>
+<label><input type="radio" name="q4"> Porque <code>go</code> só funciona com funções anônimas</label>
+<label><input type="radio" name="q4"> Porque o <code>main</code> terminou antes da goroutine escrever, e o programa acabou junto</label>
+<label><input type="radio" name="q4"> Porque <code>fmt.Println</code> não funciona dentro de goroutine</label>
+<label><input type="radio" name="q4"> Porque faltou <code>import "sync"</code></label></div>
+<div class="mc" data-answer="3"><p class="mc-q">5. Você rodou o programa das cinco goroutines e a ordem saiu diferente da página. O que isso significa?</p>
+<label><input type="radio" name="q5"> Que o seu Go está com defeito</label>
+<label><input type="radio" name="q5"> Que precisa reinstalar o Go 1.27</label>
+<label><input type="radio" name="q5"> Nada de errado: a ordem das goroutines não é garantida</label>
+<label><input type="radio" name="q5"> Que o <code>for</code> pulou números</label></div>
+<div class="mc" data-answer="2"><p class="mc-q">6. Qual é o jeito certo de esperar goroutines terminarem?</p>
+<label><input type="radio" name="q6"> Um <code>time.Sleep</code> bem grande</label>
+<label><input type="radio" name="q6"> Channels ou <code>sync.WaitGroup</code></label>
+<label><input type="radio" name="q6"> Escrever <code>go</code> duas vezes</label>
+<label><input type="radio" name="q6"> Chamar <code>runtime.NumCPU()</code></label></div>
+
+<div class="trycmd" data-goal="src:time\.Sleep\(;;out:olá da goroutine;;out:fim do main;;semerro">
+<p class="try-task"><strong>Missão:</strong> o programa abaixo só mostra <code>fim do main</code>. Faça o <code>main</code> esperar 100 milissegundos com <code>time.Sleep</code> (importe <code>"time"</code>), para a linha <code>olá da goroutine</code> aparecer também.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"fmt"
+)
+
+func diga(msg string) {
+	fmt.Println(msg)
+}
+
+func main() {
+	go diga("olá da goroutine")
+	// faça o main esperar um pouco aqui
+	fmt.Println("fim do main")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func diga(msg string) {
+	fmt.Println(msg)
+}
+
+func main() {
+	go diga("olá da goroutine")
+	time.Sleep(100 * time.Millisecond)
+	fmt.Println("fim do main")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+olá da goroutine
+fim do main
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:go func\(\);;outre:^trabalhador 1$;;outre:^trabalhador 2$;;outre:^trabalhador 3$;;semerro">
+<p class="try-task"><strong>Missão:</strong> faça cada <code>Println</code> rodar numa goroutine própria, com <code>go func() {{ … }}()</code>. A ordem das três linhas pode sair diferente a cada execução: a missão só confere se as três apareceram.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	for i := 1; i &lt;= 3; i++ {
+		// rode o Println abaixo numa goroutine
+		fmt.Println("trabalhador", i)
+	}
+	time.Sleep(100 * time.Millisecond)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	for i := 1; i &lt;= 3; i++ {
+		go func() {
+			fmt.Println("trabalhador", i)
+		}()
+	}
+	time.Sleep(100 * time.Millisecond)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+trabalhador 3
+trabalhador 1
+trabalhador 2
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>go f()</code> roda <code>f</code> numa goroutine e volta na hora, sem esperar.</li>
+<li>Quando o <code>main</code> termina, o programa acaba, mesmo com goroutines no meio do trabalho.</li>
+<li>A ordem entre goroutines não é garantida. Para esperar, use channels ou <code>sync.WaitGroup</code>, não <code>time.Sleep</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

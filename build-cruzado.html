@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build cruzado em Go — GOOS, GOARCH e o comando file | Guia Go</title>
+<meta name="description" content="Build cruzado em Go com saída real: GOOS e GOARCH, executáveis para Windows, macOS e Linux ARM conferidos com file, go tool dist list, Exec format error e unsupported GOOS/GOARCH pair.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Build Cruzado (<span class="hl">GOOS</span> e <span class="hl">GOARCH</span>)</h1>
+
+<p class="intro">Uma das coisas mais legais do Go: do seu Linux você gera um executável para Windows, para Mac ou para um Raspberry Pi, sem instalar nada a mais. Basta dizer o sistema (<code>GOOS</code>) e a arquitetura do processador (<code>GOARCH</code>) na hora do <code>go build</code>. Nesta aula você gera quatro executáveis e usa o comando <code>file</code> para provar o que cada um é.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>O que são <code>GOOS</code> e <code>GOARCH</code> e como ver os valores atuais com <code>go env</code>.</li><li>Gerar executáveis para Windows, macOS e Linux ARM com <code>GOOS=… GOARCH=… go build</code>.</li><li>Conferir o resultado com <code>file</code> e listar as combinações com <code>go tool dist list</code>.</li><li>Os erros reais: <code>Exec format error</code> e <code>unsupported GOOS/GOARCH pair</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), dentro de <code>~/projetos/go-nivel3</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. O comando <code>file</code> vem na maioria dos Linux (se faltar, instale o pacote <code>file</code>). Os <code>BuildID</code> que ele mostra são impressões digitais de cada compilação: no seu computador serão outros, assim como os tamanhos exatos dos arquivos. As mensagens do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída.</div>
+
+<hr>
+<h2>1. O programa e o ambiente atual</h2>
+<p>Um programa que diz para qual sistema e arquitetura foi compilado, usando o pacote <code>runtime</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	fmt.Printf("Olá de %s/%s!\n", runtime.GOOS, runtime.GOARCH)
+}</pre>
+<p>Sem dizer nada, o Go compila para a máquina onde está rodando. O <code>go env</code> mostra quais são:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/build-cruzado/ola">$ go env GOOS GOARCH
+linux
+amd64
+$ go build -o ola . &amp;&amp; ./ola
+Olá de linux/amd64!</pre>
+
+<hr>
+<h2>2. Compilando para outros sistemas</h2>
+<p>Escreva as variáveis antes do comando, na mesma linha. Elas valem só para aquele comando. Quando dá certo, o <code>go build</code> não escreve nada:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/build-cruzado/ola">$ GOOS=windows GOARCH=amd64 go build -o ola.exe .
+$ GOOS=darwin GOARCH=arm64 go build -o ola-mac .
+$ GOOS=linux GOARCH=arm64 go build -o ola-arm64 .
+$ ls -l ola ola.exe ola-mac ola-arm64
+-rwxr-xr-x 1 ana ana 2359758 Nov 21 09:14 ola
+-rwxr-xr-x 1 ana ana 2346482 Nov 21 09:14 ola-arm64
+-rwxr-xr-x 1 ana ana 2429890 Nov 21 09:14 ola-mac
+-rwxr-xr-x 1 ana ana 2506240 Nov 21 09:14 ola.exe</pre>
+<dl class="anatomy"><dt>GOOS=windows</dt><dd>o sistema de destino: <code>linux</code>, <code>windows</code>, <code>darwin</code> (macOS), <code>freebsd</code>…</dd><dt>GOARCH=amd64</dt><dd>o processador: <code>amd64</code> (Intel/AMD 64 bits), <code>arm64</code> (Mac M1 em diante, Raspberry Pi recente), <code>386</code>, <code>arm</code>…</dd><dt>go build</dt><dd>compila como sempre.</dd><dt>-o ola.exe</dt><dd>o nome do arquivo gerado. No Windows, use <code>.exe</code>.</dd></dl>
+
+<hr>
+<h2>3. Provando com o <code>file</code></h2>
+<p>O comando <code>file</code> olha o conteúdo do arquivo (não o nome) e diz o que ele é:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/build-cruzado/ola">$ file ola ola.exe ola-mac ola-arm64
+ola:       ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, Go BuildID=rk_mV_0jrJNwg8AhLXYy/9wsrTeeOkaMbnRozOfgO/J5t-syxyTwGVfR59o9X1/6G-yhyFQevJHohuyURBf, BuildID[sha1]=4529fc5cb8ec7594a8ff1204cb23d351407d9543, with debug_info, not stripped
+ola.exe:   PE32+ executable for MS Windows 10.00 (console), x86-64, 16 sections
+ola-mac:   Mach-O 64-bit arm64 executable, flags:&lt;|DYLDLINK|PIE&gt;
+ola-arm64: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, Go BuildID=pXYAU39CTRsQKHZ2hQze/JVirHyIqiJMXBD-aomgz/eHuAsc0fa0rbnQ7_0VTD/wAntA5nGq_2DyhZZM1l-, BuildID[sha1]=4e756bb12027b6689573e3d8c296a4d55a2dbced, with debug_info, not stripped</pre>
+<div class="table-wrap"><table class="ref">
+<tr><th>Arquivo</th><th>O que o <code>file</code> viu</th></tr>
+<tr><td><code>ola</code></td><td><code>ELF 64-bit</code>, <code>x86-64</code>: executável de Linux para Intel/AMD. <code>statically linked</code>: não depende de bibliotecas do sistema.</td></tr>
+<tr><td><code>ola.exe</code></td><td><code>PE32+ executable for MS Windows</code>, <code>x86-64</code>: executável de Windows 64 bits.</td></tr>
+<tr><td><code>ola-mac</code></td><td><code>Mach-O 64-bit arm64</code>: executável de macOS para chips Apple.</td></tr>
+<tr><td><code>ola-arm64</code></td><td><code>ELF 64-bit</code>, <code>ARM aarch64</code>: Linux em processador ARM 64 bits.</td></tr>
+</table></div>
+<p>Num Windows, o <code>ola.exe</code> escreveria <code>Olá de windows/amd64!</code>, porque o <code>runtime.GOOS</code> é decidido na compilação (não rodamos aqui, porque a coleta foi num Linux). Nesta máquina ele não roda (veja “Quando dá errado”).</p>
+
+<hr>
+<h2>4. Quais combinações existem?</h2>
+<pre class="term" data-cwd="~/projetos/go-nivel3/build-cruzado/ola">$ go tool dist list | wc -l
+47
+$ go tool dist list | grep -E '^(linux|windows|darwin)/'
+darwin/amd64
+darwin/arm64
+linux/386
+linux/amd64
+linux/arm
+linux/arm64
+linux/loong64
+linux/mips
+linux/mips64
+linux/mips64le
+linux/mipsle
+linux/ppc64
+linux/ppc64le
+linux/riscv64
+linux/s390x
+windows/386
+windows/amd64
+windows/arm64</pre>
+<p>São 47 combinações nesta versão do Go. Filtramos só as de Linux, Windows e macOS.</p>
+<h3>Dois extras úteis</h3>
+<p><code>CGO_ENABLED=0</code> desliga o uso de código C e garante um executável que não depende de nada do sistema (aqui ele já saía assim). E <code>-ldflags='-s -w'</code> tira as informações de depuração, deixando o arquivo menor:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/build-cruzado/ola">$ CGO_ENABLED=0 go build -o ola-estatico . &amp;&amp; file ola-estatico
+ola-estatico: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, Go BuildID=Q70h7ZQj_E8vEcUVbUwj/jEAgOdsDCG_n38NNZbEX/J5t-syxyTwGVfR59o9X1/KGiu9Eu5WHk7yqeKmh79, BuildID[sha1]=a96445b3db029817cb997581a114e7970de9a2d1, with debug_info, not stripped
+$ go build -ldflags='-s -w' -o ola-menor . &amp;&amp; ls -l ola ola-menor
+-rwxr-xr-x 1 ana ana 2359758 Nov 21 09:14 ola
+-rwxr-xr-x 1 ana ana 1523872 Nov 21 09:14 ola-menor</pre>
+<p>O <code>ola-menor</code> ficou com cerca de 1,5 MB, contra 2,4 MB do <code>ola</code>.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Rodar o executável de outro sistema</strong>
+<p>Um executável de Windows ou de ARM não roda neste Linux x86-64. Quem reclama é o próprio shell, o <code>bash</code>:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/build-cruzado/ola">$ ./ola.exe
+bash: ./ola.exe: cannot execute binary file: Exec format error
+$ ./ola-arm64
+bash: ./ola-arm64: cannot execute binary file: Exec format error</pre>
+<p><code>Exec format error</code> quer dizer “não sei executar este formato”. O arquivo está certo; a máquina é que é outra.</p></div>
+<div class="cenario"><strong>Nome de sistema errado</strong>
+<p>Um erro de digitação no <code>GOOS</code> é recusado na hora:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/build-cruzado/ola">$ GOOS=windowss go build -o x .
+go: unsupported GOOS/GOARCH pair windowss/amd64</pre>
+<p>O Go mostra a combinação que tentou (<code>windowss/amd64</code>; o <code>amd64</code> veio da máquina atual, porque não passamos <code>GOARCH</code>). Confira os nomes com <code>go tool dist list</code>.</p></div>
+<div class="cenario"><strong>No Windows, as variáveis são escritas de outro jeito</strong>
+<p>O <code>GOOS=… go build</code> na mesma linha é sintaxe do Bash (Linux, macOS, Git Bash, WSL). No PowerShell, use <code>$env:GOOS="linux"</code> e <code>$env:GOARCH="amd64"</code> antes do <code>go build</code>; no Prompt de Comando, <code>set GOOS=linux</code>.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você digita</th><th>O que faz</th></tr>
+<tr><td><code>go env GOOS GOARCH</code></td><td>Mostra o sistema e a arquitetura atuais.</td></tr>
+<tr><td><code>GOOS=windows GOARCH=amd64 go build -o app.exe .</code></td><td>Executável para Windows 64 bits.</td></tr>
+<tr><td><code>GOOS=darwin GOARCH=arm64 go build -o app-mac .</code></td><td>Executável para Mac com chip Apple.</td></tr>
+<tr><td><code>GOOS=linux GOARCH=arm64 go build -o app-arm64 .</code></td><td>Executável para Linux ARM 64 bits.</td></tr>
+<tr><td><code>go tool dist list</code></td><td>Lista todas as combinações aceitas.</td></tr>
+<tr><td><code>file arquivo</code></td><td>Diz que tipo de executável é.</td></tr>
+<tr><td><code>-ldflags='-s -w'</code></td><td>Executável menor, sem informações de depuração.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+<div class="exercise"><h3>1. O sistema</h3><p>Complete para compilar para Windows:</p><div class="ex-code"><input data-answer="GOOS" aria-label="resposta">=windows GOARCH=amd64 go build -o ola.exe .</div></div>
+<div class="exercise"><h3>2. O processador</h3><p>Complete para compilar para Linux ARM 64 bits:</p><div class="ex-code">GOOS=linux GOARCH=<input data-answer="arm64" aria-label="resposta"> go build -o ola-arm64 .</div></div>
+<div class="exercise"><h3>3. O macOS</h3><p>Qual é o valor de <code>GOOS</code> para o macOS?</p><div class="ex-code">GOOS=<input data-answer="darwin" aria-label="resposta"></div></div>
+<div class="mc" data-answer="2"><p class="mc-q">4. O que o comando <code>file ola.exe</code> mostrou?</p>
+<label><input type="radio" name="q4"> <code>ELF 64-bit LSB executable</code></label>
+<label><input type="radio" name="q4"> <code>PE32+ executable for MS Windows</code>…</label>
+<label><input type="radio" name="q4"> <code>Exec format error</code></label>
+<label><input type="radio" name="q4"> Nada</label></div>
+<div class="mc" data-answer="2"><p class="mc-q">5. Por que <code>./ola.exe</code> deu <code>Exec format error</code> no Linux?</p>
+<label><input type="radio" name="q5"> Porque o build falhou</label>
+<label><input type="radio" name="q5"> Porque é um executável de Windows, e o Linux não sabe executar esse formato</label>
+<label><input type="radio" name="q5"> Porque falta permissão</label>
+<label><input type="radio" name="q5"> Porque o nome termina em <code>.exe</code></label></div>
+<div class="mc" data-answer="2"><p class="mc-q">6. No erro <code>unsupported GOOS/GOARCH pair windowss/amd64</code>, de onde veio o <code>amd64</code>?</p>
+<label><input type="radio" name="q6"> Foi digitado errado também</label>
+<label><input type="radio" name="q6"> Da máquina atual, porque não passamos <code>GOARCH</code></label>
+<label><input type="radio" name="q6"> Do nome do arquivo</label>
+<label><input type="radio" name="q6"> É sempre <code>amd64</code></label></div>
+
+<div class="trycmd" data-goal="src:runtime\.GOOS;;src:runtime\.GOARCH;;outre:^Olá de [a-z0-9]+/[a-z0-9]+!$;;semerro">
+<p class="try-task"><strong>Missão:</strong> faça o programa mostrar <code>Olá de &lt;sistema&gt;/&lt;arquitetura&gt;!</code> usando <code>runtime.GOOS</code> e <code>runtime.GOARCH</code> (importe <code>"runtime"</code>). Rode com <code>go run .</code>: a resposta depende do seu computador, por exemplo <code>Olá de linux/amd64!</code> ou <code>Olá de windows/amd64!</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"fmt"
+)
+
+func main() {
+	// mostre "Olá de &lt;sistema&gt;/&lt;arquitetura&gt;!" com as constantes GOOS e GOARCH do pacote runtime
+	fmt.Println("Olá!")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	fmt.Printf("Olá de %s/%s!\n", runtime.GOOS, runtime.GOARCH)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Olá de linux/amd64!
+</pre>
+</div>
+
+<div class="trycmd" data-goal="out:PE32+ executable for MS Windows">
+<p class="try-task"><strong>Missão:</strong> com este programa, gere um executável de Windows e confira com o <code>file</code>: <code>GOOS=windows GOARCH=amd64 go build -o ola.exe . &amp;&amp; file ola.exe</code> (no Linux, macOS, WSL ou Git Bash). Cole a saída do <code>file</code>.</p>
+<pre class="script" data-file="main.go" data-cmd="GOOS=windows GOARCH=amd64 go build -o ola.exe . &amp;&amp; file ola.exe">
+package main
+
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	fmt.Printf("Olá de %s/%s!\n", runtime.GOOS, runtime.GOARCH)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	fmt.Printf("Olá de %s/%s!\n", runtime.GOOS, runtime.GOARCH)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+ola.exe: PE32+ executable for MS Windows 10.00 (console), x86-64, 16 sections
+</pre>
+</div>
+
+<div class="trycmd" data-goal="erro:unsupported GOOS/GOARCH pair windowss/">
+<p class="try-task"><strong>Missão:</strong> tente compilar com o nome do sistema digitado errado, <code>GOOS=windowss go build .</code>, e cole o erro. O final da mensagem (a arquitetura) depende do seu computador.</p>
+<pre class="script" data-file="main.go" data-cmd="GOOS=windowss go build .">
+package main
+
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	fmt.Printf("Olá de %s/%s!\n", runtime.GOOS, runtime.GOARCH)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	fmt.Printf("Olá de %s/%s!\n", runtime.GOOS, runtime.GOARCH)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+go: unsupported GOOS/GOARCH pair windowss/amd64
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>GOOS</code> é o sistema, <code>GOARCH</code> o processador; o <code>go env</code> mostra os atuais.</li>
+<li><code>GOOS=… GOARCH=… go build</code> gera executáveis para outras plataformas, sem instalar nada.</li>
+<li>O <code>file</code> confirma o formato; rodar o executável de outra plataforma dá <code>Exec format error</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

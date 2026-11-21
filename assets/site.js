@@ -68,17 +68,17 @@ var NIVEIS = [
   ]},
   { id: "n3", nome: "Nível 3 · Avançado", curto: "Avançado", desc: "Concorrência, rede e ferramentas", grupos: [
     { grupo: "Concorrência", itens: [
-      ["goroutines.html", "Goroutines", { pronta: false }],
-      ["channels.html", "Channels", { pronta: false }],
-      ["select.html", "select", { pronta: false }],
-      ["sync.html", "sync.WaitGroup e sync.Mutex", { pronta: false }],
-      ["context.html", "context", { pronta: false }]
+      ["goroutines.html", "Goroutines"],
+      ["channels.html", "Channels"],
+      ["select.html", "select"],
+      ["sync.html", "sync.WaitGroup e sync.Mutex"],
+      ["context.html", "context"]
     ]},
     { grupo: "Rede e Ferramentas", itens: [
-      ["http-servidor.html", "Servidor HTTP (net/http)", { pronta: false }],
-      ["vet-e-gofmt.html", "go vet e gofmt", { pronta: false }],
-      ["benchmarks.html", "Benchmarks", { pronta: false }],
-      ["build-cruzado.html", "Build Cruzado (GOOS e GOARCH)", { pronta: false }]
+      ["http-servidor.html", "Servidor HTTP (net/http)"],
+      ["vet-e-gofmt.html", "go vet e gofmt"],
+      ["benchmarks.html", "Benchmarks"],
+      ["build-cruzado.html", "Build Cruzado (GOOS e GOARCH)"]
     ]}
   ]}
 ];

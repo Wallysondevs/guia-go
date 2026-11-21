@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sync.WaitGroup e sync.Mutex em Go — esperar goroutines e evitar corridas | Guia Go</title>
+<meta name="description" content="sync.WaitGroup (Add, Done, Wait e wg.Go) e sync.Mutex em Go, com saída real: a condição de corrida pega pelo go run -race e o deadlock de um WaitGroup.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">sync.WaitGroup</span> e <span class="hl">sync.Mutex</span></h1>
+
+<p class="intro">O pacote <code>sync</code> traz duas ferramentas que você vai usar o tempo todo com goroutines. O <code>WaitGroup</code> espera um grupo de goroutines terminar, sem chute de <code>time.Sleep</code>. O <code>Mutex</code> deixa só uma goroutine por vez mexer numa variável compartilhada. Nesta aula você vê também uma <em>condição de corrida</em> real, pega pelo detector do Go (<code>-race</code>).</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Esperar goroutines com <code>wg.Add</code>, <code>wg.Done</code> e <code>wg.Wait</code>, e com o atalho <code>wg.Go</code>.</li><li>O que é uma condição de corrida e como o <code>go run -race</code> a mostra.</li><li>Proteger uma variável com <code>mu.Lock()</code> e <code>mu.Unlock()</code>.</li><li>O deadlock de um <code>WaitGroup</code> que conta goroutines a mais.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), dentro de <code>~/projetos/go-nivel3</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. Em concorrência, a ordem das linhas e os números de uma condição de corrida mudam a cada execução; os endereços de memória (<code>0x00c0…</code>) e os números das goroutines no relatório do <code>-race</code> também. As mensagens do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída.</div>
+
+<hr>
+<h2>1. <code>WaitGroup</code>: esperar um grupo</h2>
+<p>O <code>WaitGroup</code> é um contador. <code>Add(1)</code> soma uma tarefa, <code>Done()</code> tira uma, e <code>Wait()</code> espera o contador chegar a zero:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	for i := 1; i &lt;= 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fmt.Println("tarefa", i, "pronta")
+		}()
+	}
+	wg.Wait()
+	fmt.Println("todas terminaram")
+}</pre>
+<p>Duas execuções:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/sync/waitgroup">$ go run .
+tarefa 3 pronta
+tarefa 2 pronta
+tarefa 1 pronta
+todas terminaram
+$ go run .
+tarefa 3 pronta
+tarefa 2 pronta
+tarefa 1 pronta
+todas terminaram</pre>
+<p>A ordem das tarefas pode mudar, mas <code>todas terminaram</code> sempre vem por último: o <code>Wait()</code> só libera quando as três chamaram <code>Done()</code>. O <code>defer wg.Done()</code> garante o <code>Done</code> mesmo se a função sair no meio.</p>
+<dl class="anatomy"><dt>var wg sync.WaitGroup</dt><dd>o contador, começando em zero. Não precisa de <code>make</code>.</dd><dt>wg.Add(1)</dt><dd>“vou esperar mais uma”. Chame <strong>antes</strong> do <code>go</code>.</dd><dt>defer wg.Done()</dt><dd>“esta terminou”, no fim da goroutine.</dd><dt>wg.Wait()</dt><dd>espera o contador voltar a zero.</dd></dl>
+
+<h3>O atalho <code>wg.Go</code></h3>
+<p>Desde o Go 1.25, <code>wg.Go(f)</code> faz o <code>Add(1)</code>, inicia a goroutine e chama o <code>Done()</code> no fim, tudo de uma vez:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	for i := 1; i &lt;= 3; i++ {
+		wg.Go(func() {
+			fmt.Println("tarefa", i, "pronta")
+		})
+	}
+	wg.Wait()
+	fmt.Println("todas terminaram")
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/sync/wg-go">$ go run .
+tarefa 3 pronta
+tarefa 1 pronta
+tarefa 2 pronta
+todas terminaram</pre>
+
+<hr>
+<h2>2. Condição de corrida</h2>
+<p>Agora 1000 goroutines somam 1 na mesma variável. O certo seria <code>1000</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	contador := 0
+	for i := 0; i &lt; 1000; i++ {
+		wg.Go(func() {
+			contador++
+		})
+	}
+	wg.Wait()
+	fmt.Println("contador:", contador)
+}</pre>
+<p>Três execuções, três resultados errados e diferentes:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/sync/corrida">$ go run .
+contador: 938
+$ go run .
+contador: 993
+$ go run .
+contador: 959</pre>
+<p>O <code>contador++</code> parece uma coisa só, mas são três passos: ler o valor, somar 1, gravar. Duas goroutines podem ler o mesmo valor ao mesmo tempo, e uma soma se perde. Isso é uma <strong>condição de corrida</strong> (<em>data race</em>). No seu computador os números serão outros (e às vezes pode até dar 1000 por sorte).</p>
+<h3>O detector: <code>go run -race</code></h3>
+<p>O Go tem um detector de corridas embutido. Basta acrescentar <code>-race</code>:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/sync/corrida">$ go run -race .
+==================
+WARNING: DATA RACE
+Read at 0x00c000018168 by goroutine 25:
+  main.main.func1()
+      /home/ana/projetos/go-nivel3/sync/corrida/main.go:13 +0x2e
+
+Previous write at 0x00c000018168 by goroutine 18:
+  main.main.func1()
+      /home/ana/projetos/go-nivel3/sync/corrida/main.go:13 +0x44
+
+Goroutine 25 (running) created at:
+  sync.(*WaitGroup).Go()
+      /usr/local/go/src/sync/waitgroup.go:238 +0x72
+
+Goroutine 18 (running) created at:
+  sync.(*WaitGroup).Go()
+      /usr/local/go/src/sync/waitgroup.go:238 +0x72
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00c000018168 by goroutine 25:
+  main.main.func1()
+      /home/ana/projetos/go-nivel3/sync/corrida/main.go:13 +0x44
+
+Previous write at 0x00c000018168 by goroutine 12:
+  main.main.func1()
+      /home/ana/projetos/go-nivel3/sync/corrida/main.go:13 +0x44
+
+Goroutine 25 (running) created at:
+  sync.(*WaitGroup).Go()
+      /usr/local/go/src/sync/waitgroup.go:238 +0x72
+
+Goroutine 12 (finished) created at:
+  sync.(*WaitGroup).Go()
+      /usr/local/go/src/sync/waitgroup.go:238 +0x72
+==================
+contador: 739
+Found 2 data race(s)
+exit status 66</pre>
+<p>Ele mostra <em>onde</em> as goroutines se atropelaram: uma leitura (<code>Read at</code>) e uma escrita anterior (<code>Previous write at</code>) na mesma linha <code>main.go:13</code>, o <code>contador++</code>. No fim, <code>Found 2 data race(s)</code> e o código de saída <code>66</code>, que o detector usa para avisar que achou corrida.</p>
+<div class="tip"><strong>Use <code>-race</code> nos testes</strong><p>O <code>-race</code> deixa o programa mais lento, então não é para produção. Mas vale rodar os testes com ele: <code>go test -race ./...</code>. Ele só acha corridas que <em>acontecem</em> naquela execução, então teste caminhos concorrentes de verdade.</p></div>
+
+<hr>
+<h2>3. <code>Mutex</code>: um de cada vez</h2>
+<p>Um <code>sync.Mutex</code> é uma tranca. <code>Lock()</code> fecha (se já estiver fechada, espera); <code>Unlock()</code> abre. Entre os dois, só uma goroutine por vez:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	contador := 0
+	for i := 0; i &lt; 1000; i++ {
+		wg.Go(func() {
+			mu.Lock()
+			contador++
+			mu.Unlock()
+		})
+	}
+	wg.Wait()
+	fmt.Println("contador:", contador)
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/sync/mutex">$ go run .
+contador: 1000
+$ go run -race .
+contador: 1000</pre>
+<p>Agora dá <code>1000</code> sempre, e o <code>-race</code> não reclama de nada.</p>
+<div class="tip"><strong><code>defer mu.Unlock()</code></strong><p>Em funções maiores, escreva <code>mu.Lock()</code> e logo abaixo <code>defer mu.Unlock()</code>. Assim a tranca abre mesmo se a função sair por um <code>return</code> no meio. Esquecer o <code>Unlock</code> trava todo mundo.</p></div>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong><code>Add</code> a mais: espera eterna</strong>
+<p>Aqui o <code>Add(2)</code> promete duas tarefas, mas só uma chama <code>Done()</code>. O <code>Wait()</code> espera para sempre, e o Go derruba o programa:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		fmt.Println("só uma tarefa")
+	}()
+	wg.Wait()
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/sync/wg-esquecido">$ go run .
+só uma tarefa
+fatal error: all goroutines are asleep - deadlock!
+
+goroutine 1 [sync.WaitGroup.Wait]:
+sync.runtime_SemacquireWaitGroup(0x348063434070?, 0xe0?)
+	/usr/local/go/src/runtime/sema.go:114 +0x2e
+sync.(*WaitGroup).Wait(0x348063432110)
+	/usr/local/go/src/sync/waitgroup.go:206 +0x85
+main.main()
+	/home/ana/projetos/go-nivel3/sync/wg-esquecido/main.go:15 +0x89
+exit status 2</pre>
+<p>O motivo entre colchetes, <code>[sync.WaitGroup.Wait]</code>, diz onde a goroutine 1 travou, e a última linha do rastro aponta <code>main.go:15</code>, o <code>wg.Wait()</code>. As linhas do meio são de dentro da biblioteca do Go (<code>/usr/local/go/src/…</code>).</p></div>
+<div class="cenario"><strong>Copiar um <code>Mutex</code></strong>
+<p>Um <code>Mutex</code> (ou uma struct que tenha um) não pode ser copiado depois de usado: passe por ponteiro. O <a href="vet-e-gofmt.html"><code>go vet</code></a> avisa quando você copia sem querer.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>var wg sync.WaitGroup</code></td><td>Cria o contador de tarefas.</td></tr>
+<tr><td><code>wg.Add(n)</code> / <code>wg.Done()</code></td><td>Soma <code>n</code> tarefas / tira uma.</td></tr>
+<tr><td><code>wg.Go(func() { … })</code></td><td><code>Add(1)</code> + <code>go</code> + <code>Done()</code> num passo só (Go 1.25+).</td></tr>
+<tr><td><code>wg.Wait()</code></td><td>Espera o contador chegar a zero.</td></tr>
+<tr><td><code>var mu sync.Mutex</code></td><td>Cria a tranca.</td></tr>
+<tr><td><code>mu.Lock()</code> / <code>mu.Unlock()</code></td><td>Fecha / abre a tranca.</td></tr>
+<tr><td><code>go run -race .</code></td><td>Roda com o detector de condições de corrida.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+<div class="exercise"><h3>1. Espere o grupo</h3><p>Complete para esperar todas as goroutines:</p><div class="ex-code">wg.<input data-answer="Wait" aria-label="resposta">()</div></div>
+<div class="exercise"><h3>2. Tranque</h3><p>Complete para fechar a tranca antes de mexer no contador:</p><div class="ex-code">mu.<input data-answer="Lock" aria-label="resposta">()</div></div>
+<div class="exercise"><h3>3. O detector</h3><p>Qual opção do <code>go run</code> liga o detector de corridas?</p><div class="ex-code">go run <input data-answer="-race" aria-label="resposta"> .</div></div>
+<div class="mc" data-answer="2"><p class="mc-q">4. Por que 1000 goroutines fazendo <code>contador++</code> deram números como 938 e 993?</p>
+<label><input type="radio" name="q4"> Porque o <code>for</code> pulou voltas</label>
+<label><input type="radio" name="q4"> Porque <code>contador++</code> é ler, somar e gravar, e goroutines ao mesmo tempo perdem somas</label>
+<label><input type="radio" name="q4"> Porque o <code>WaitGroup</code> não esperou</label>
+<label><input type="radio" name="q4"> Porque <code>int</code> só vai até 999</label></div>
+<div class="mc" data-answer="2"><p class="mc-q">5. O que o <code>wg.Go(f)</code> faz?</p>
+<label><input type="radio" name="q5"> Só inicia a goroutine, sem contar</label>
+<label><input type="radio" name="q5"> <code>Add(1)</code>, inicia <code>f</code> numa goroutine e chama <code>Done()</code> quando <code>f</code> termina</label>
+<label><input type="radio" name="q5"> Espera todas as goroutines</label>
+<label><input type="radio" name="q5"> Tranca o contador</label></div>
+<div class="mc" data-answer="2"><p class="mc-q">6. No relatório do <code>-race</code>, o que <code>Found 2 data race(s)</code> e <code>exit status 66</code> indicam?</p>
+<label><input type="radio" name="q6"> Que o programa compilou duas vezes</label>
+<label><input type="radio" name="q6"> Que o detector achou corridas e terminou com o código 66</label>
+<label><input type="radio" name="q6"> Que faltou memória</label>
+<label><input type="radio" name="q6"> Que há 66 goroutines</label></div>
+
+<div class="trycmd" data-goal="src:sync\.WaitGroup;;src:wg\.Wait\(\);;outre:^tarefa 1$;;outre:^tarefa 2$;;outre:^tarefa 3$;;outre:^tarefa 4$;;outre:^as 4 terminaram$;;semerro">
+<p class="try-task"><strong>Missão:</strong> troque o <code>time.Sleep</code> por um <code>sync.WaitGroup</code> (com <code>wg.Go</code> ou com <code>Add</code>/<code>Done</code>) e um <code>wg.Wait()</code>. As quatro tarefas podem sair em qualquer ordem; a missão confere se todas apareceram e se a última linha veio.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	for i := 1; i &lt;= 4; i++ {
+		go func() {
+			fmt.Println("tarefa", i)
+		}()
+	}
+	time.Sleep(100 * time.Millisecond) // troque este chute por um WaitGroup
+	fmt.Println("as 4 terminaram")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	for i := 1; i &lt;= 4; i++ {
+		wg.Go(func() {
+			fmt.Println("tarefa", i)
+		})
+	}
+	wg.Wait()
+	fmt.Println("as 4 terminaram")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+tarefa 2
+tarefa 4
+tarefa 3
+tarefa 1
+as 4 terminaram
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:\.Lock\(\);;src:\.Unlock\(\);;out:contador: 1000;;semerro">
+<p class="try-task"><strong>Missão:</strong> este programa tem uma condição de corrida. Proteja o <code>contador++</code> com um <code>sync.Mutex</code> (<code>mu.Lock()</code> antes e <code>mu.Unlock()</code> depois) e rode com o detector ligado. Com a correção, sai <code>contador: 1000</code> e o <code>-race</code> fica quieto.</p>
+<pre class="script" data-file="main.go" data-cmd="go run -race .">
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	contador := 0
+	for i := 0; i &lt; 1000; i++ {
+		wg.Go(func() {
+			contador++
+		})
+	}
+	wg.Wait()
+	fmt.Println("contador:", contador)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	contador := 0
+	for i := 0; i &lt; 1000; i++ {
+		wg.Go(func() {
+			mu.Lock()
+			contador++
+			mu.Unlock()
+		})
+	}
+	wg.Wait()
+	fmt.Println("contador:", contador)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+contador: 1000
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:contador\+\+;;erro:WARNING: DATA RACE">
+<p class="try-task"><strong>Missão:</strong> rode o programa com a corrida <strong>como está</strong>, mas com o detector: <code>go run -race .</code>, e cole a saída. Os endereços e o número final mudam a cada vez; a missão confere se o aviso <code>WARNING: DATA RACE</code> apareceu.</p>
+<pre class="script" data-file="main.go" data-cmd="go run -race .">
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	contador := 0
+	for i := 0; i &lt; 1000; i++ {
+		wg.Go(func() {
+			contador++
+		})
+	}
+	wg.Wait()
+	fmt.Println("contador:", contador)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	contador := 0
+	for i := 0; i &lt; 1000; i++ {
+		wg.Go(func() {
+			contador++
+		})
+	}
+	wg.Wait()
+	fmt.Println("contador:", contador)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+==================
+WARNING: DATA RACE
+Read at 0x00c0000ac038 by goroutine 9:
+  main.main.func1()
+      /home/ana/projetos/go-nivel3/missoes/syn3/main.go:13 +0x2e
+
+Previous write at 0x00c0000ac038 by goroutine 8:
+  main.main.func1()
+      /home/ana/projetos/go-nivel3/missoes/syn3/main.go:13 +0x44
+
+Goroutine 9 (running) created at:
+  sync.(*WaitGroup).Go()
+      /usr/local/go/src/sync/waitgroup.go:238 +0x72
+
+Goroutine 8 (finished) created at:
+  sync.(*WaitGroup).Go()
+      /usr/local/go/src/sync/waitgroup.go:238 +0x72
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00c0000ac038 by goroutine 9:
+  main.main.func1()
+      /home/ana/projetos/go-nivel3/missoes/syn3/main.go:13 +0x44
+
+Previous write at 0x00c0000ac038 by goroutine 10:
+  main.main.func1()
+      /home/ana/projetos/go-nivel3/missoes/syn3/main.go:13 +0x44
+
+Goroutine 9 (running) created at:
+  sync.(*WaitGroup).Go()
+      /usr/local/go/src/sync/waitgroup.go:238 +0x72
+
+Goroutine 10 (finished) created at:
+  sync.(*WaitGroup).Go()
+      /usr/local/go/src/sync/waitgroup.go:238 +0x72
+==================
+contador: 795
+Found 2 data race(s)
+exit status 66
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>WaitGroup</code> espera um grupo de goroutines: <code>Add</code>/<code>Done</code>/<code>Wait</code>, ou <code>wg.Go</code> + <code>Wait</code>.</li>
+<li>Várias goroutines escrevendo na mesma variável sem proteção é condição de corrida; o <code>-race</code> mostra onde.</li>
+<li><code>Mutex</code> deixa uma goroutine por vez: <code>Lock()</code>, mexe, <code>Unlock()</code>.</li>
+<li><code>Add</code> a mais que <code>Done</code> termina em <code>all goroutines are asleep - deadlock!</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

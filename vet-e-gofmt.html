@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>go vet e gofmt — formatar e achar bugs que compilam | Guia Go</title>
+<meta name="description" content="gofmt -l, -d e -w e go vet com saída real: o código torto arrumado, o %!d(string=Ana) do Printf e o aviso de cópia de sync.Mutex.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">go vet</span> e <span class="hl">gofmt</span></h1>
+
+<p class="intro">Duas ferramentas que vêm com o Go e que todo projeto usa. O <code>gofmt</code> arruma a formatação do código: recuo com tabulação, espaços, linhas em branco. Assim todo código Go tem a mesma cara, e ninguém discute estilo. O <code>go vet</code> procura erros que <strong>compilam</strong>, mas quase certamente são bugs, como um <code>%d</code> recebendo texto.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Listar, comparar e corrigir a formatação com <code>gofmt -l</code>, <code>-d</code> e <code>-w</code>.</li><li>Rodar o <code>go vet</code> e ler os avisos reais (formato do <code>Printf</code> e cópia de <code>Mutex</code>).</li><li>Por que um código que compila ainda pode estar errado.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), dentro de <code>~/projetos/go-nivel3</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. O <code>gofmt</code> e o <code>go vet</code> não escrevem nada quando está tudo certo: saída vazia é boa notícia. As mensagens do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída.</div>
+
+<hr>
+<h2>1. Um código feio que funciona</h2>
+<p>Este arquivo compila e roda, mas está todo torto:</p>
+<pre class="file" data-file="main.go">package main
+import "fmt"
+func main(){
+x:=10
+  if x&gt;5 {
+fmt.Println("x é grande")
+    }
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/vet-e-gofmt/feio">$ go run .
+x é grande</pre>
+<h3><code>gofmt -l</code>: quem está fora do padrão?</h3>
+<p>O <code>-l</code> (de <em>list</em>) só lista os arquivos que o <code>gofmt</code> mudaria:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/vet-e-gofmt/feio">$ gofmt -l .
+main.go</pre>
+<h3><code>gofmt -d</code>: o que mudaria?</h3>
+<p>O <code>-d</code> (de <em>diff</em>) mostra as mudanças sem gravar nada. Linhas com <code>-</code> saem, linhas com <code>+</code> entram:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/vet-e-gofmt/feio">$ gofmt -d main.go
+diff main.go.orig main.go
++++ main.go
+@@ -1,8 +1,10 @@
+ package main
++
+ import "fmt"
+-func main(){
+-x:=10
+-  if x&gt;5 {
+-fmt.Println("x é grande")
+-    }
++
++func main() {
++	x := 10
++	if x &gt; 5 {
++		fmt.Println("x é grande")
++	}
+ }</pre>
+<p>As linhas <code>main.go.orig</code> e <code>main.go</code> do cabeçalho são só os rótulos do “antes” e do “depois” que o próprio <code>gofmt</code> escreve: não existe arquivo <code>.orig</code> na pasta.</p>
+<h3><code>gofmt -w</code>: corrija</h3>
+<p>O <code>-w</code> (de <em>write</em>) grava a versão arrumada no próprio arquivo. Depois disso, o <code>-l</code> não lista mais nada:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/vet-e-gofmt/feio">$ gofmt -w main.go
+$ gofmt -l .
+$ cat main.go
+package main
+
+import "fmt"
+
+func main() {
+	x := 10
+	if x &gt; 5 {
+		fmt.Println("x é grande")
+	}
+}</pre>
+<p>Repare no que mudou: linhas em branco depois do <code>package</code> e do <code>import</code>, espaço antes da <code>{</code>, espaços em volta de <code>:=</code> e <code>&gt;</code>, e recuo com <strong>tabulação</strong>. Quase todo editor com a extensão de Go roda o <code>gofmt</code> ao salvar.</p>
+<div class="tip"><strong><code>go fmt</code> e <code>gofmt</code></strong><p><code>go fmt ./...</code> é um atalho que roda <code>gofmt -l -w</code> em todos os pacotes do módulo. No dia a dia, é o que mais se usa.</p></div>
+
+<hr>
+<h2>2. <code>go vet</code>: compila, mas está errado</h2>
+<p>Aqui o <code>%d</code> (número) recebe <code>nome</code>, que é texto. O Go compila e roda, mas a saída sai estranha:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	nome := "Ana"
+	idade := 30
+	fmt.Printf("%d tem %d anos\n", nome, idade)
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/vet-e-gofmt/printf">$ go run .
+%!d(string=Ana) tem 30 anos</pre>
+<p>O <code>%!d(string=Ana)</code> é o jeito do <code>fmt</code> dizer “pediram <code>%d</code>, mas veio uma <code>string</code> com o valor <code>Ana</code>”. O <code>go vet</code> pega isso <strong>antes</strong> de rodar:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/vet-e-gofmt/printf">$ go vet .
+main.go:8:14: fmt.Printf format %d has arg nome of wrong type string</pre>
+<p>O aviso aponta arquivo, linha e coluna (<code>main.go:8:14</code>) e diz exatamente o problema. Para checar o módulo inteiro, use <code>./...</code>:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/vet-e-gofmt/printf">$ go vet ./...
+main.go:8:14: fmt.Printf format %d has arg nome of wrong type string</pre>
+<dl class="anatomy"><dt>go vet</dt><dd>roda dezenas de verificações (as “análises”) sobre o código.</dd><dt>.</dt><dd>o pacote da pasta atual.</dd><dt>./...</dt><dd>a pasta atual e todas as subpastas do módulo.</dd></dl>
+
+<h3>Cópia de <code>Mutex</code></h3>
+<p>Um <code>sync.Mutex</code> não pode ser copiado (aula <a href="sync.html">sync</a>). Passar a struct por valor copia a tranca junto. Compila, mas o <code>go vet</code> reclama:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+type Contador struct {
+	mu    sync.Mutex
+	valor int
+}
+
+func mostrar(c Contador) {
+	fmt.Println(c.valor)
+}
+
+func main() {
+	var c Contador
+	mostrar(c)
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/vet-e-gofmt/copia">$ go build . &amp;&amp; echo compilou
+compilou
+$ go vet .
+main.go:13:16: mostrar passes lock by value: exemplo/copia.Contador contains sync.Mutex
+main.go:19:10: call of mostrar copies lock value: exemplo/copia.Contador contains sync.Mutex</pre>
+<p>São dois avisos: a função <em>recebe</em> a tranca por valor (linha 13) e a chamada <em>copia</em> a tranca (linha 19). A correção é passar um ponteiro: <code>func mostrar(c *Contador)</code> e <code>mostrar(&amp;c)</code>.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>“Mas compilou!”</strong>
+<p>O compilador só garante que o código é Go válido. O <code>go vet</code> procura o que é válido mas suspeito. Por isso projetos sérios rodam os dois antes de cada commit, e o <code>go test</code> já roda uma parte do <code>go vet</code> automaticamente.</p></div>
+<div class="cenario"><strong>O <code>gofmt -d</code> sai com código 1</strong>
+<p>Quando há diferença, o <code>gofmt -d</code> termina com código de saída 1 (na coleta, também foi assim). Não é erro de execução: é o jeito de scripts saberem que há algo a formatar.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você digita</th><th>O que faz</th></tr>
+<tr><td><code>gofmt -l .</code></td><td>Lista os arquivos fora do padrão.</td></tr>
+<tr><td><code>gofmt -d arquivo.go</code></td><td>Mostra as mudanças, sem gravar.</td></tr>
+<tr><td><code>gofmt -w arquivo.go</code></td><td>Grava a versão formatada.</td></tr>
+<tr><td><code>go fmt ./...</code></td><td>Formata todos os pacotes do módulo.</td></tr>
+<tr><td><code>go vet .</code> / <code>go vet ./...</code></td><td>Procura bugs prováveis no pacote / no módulo todo.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+<div class="exercise"><h3>1. Liste</h3><p>Complete para listar os arquivos fora do padrão:</p><div class="ex-code">gofmt <input data-answer="-l" aria-label="opção"> .</div></div>
+<div class="exercise"><h3>2. Grave</h3><p>Complete para gravar a formatação no arquivo:</p><div class="ex-code">gofmt <input data-answer="-w" aria-label="opção"> main.go</div></div>
+<div class="exercise"><h3>3. Módulo inteiro</h3><p>Complete para rodar o <code>go vet</code> em todas as pastas do módulo:</p><div class="ex-code">go vet <input data-answer="./..." aria-label="padrão"></div></div>
+<div class="mc" data-answer="2"><p class="mc-q">4. O que <code>%!d(string=Ana)</code> na saída quer dizer?</p>
+<label><input type="radio" name="q4"> Que a Ana tem um número secreto</label>
+<label><input type="radio" name="q4"> Que o <code>%d</code> recebeu uma <code>string</code> com o valor <code>Ana</code></label>
+<label><input type="radio" name="q4"> Que o Go traduziu o nome</label>
+<label><input type="radio" name="q4"> Que faltou o <code>\n</code></label></div>
+<div class="mc" data-answer="2"><p class="mc-q">5. O programa com o <code>Mutex</code> copiado compilou. O que o <code>go vet</code> mostrou?</p>
+<label><input type="radio" name="q5"> Nada</label>
+<label><input type="radio" name="q5"> <code>passes lock by value</code> e <code>copies lock value</code></label>
+<label><input type="radio" name="q5"> Um erro de compilação</label>
+<label><input type="radio" name="q5"> Um <code>panic</code></label></div>
+<div class="mc" data-answer="2"><p class="mc-q">6. Qual a diferença entre <code>gofmt -d</code> e <code>gofmt -w</code>?</p>
+<label><input type="radio" name="q6"> Nenhuma</label>
+<label><input type="radio" name="q6"> <code>-d</code> só mostra as mudanças; <code>-w</code> grava no arquivo</label>
+<label><input type="radio" name="q6"> <code>-d</code> apaga o arquivo</label>
+<label><input type="radio" name="q6"> <code>-w</code> só funciona no Windows</label></div>
+
+<div class="trycmd" data-goal="src:%d tem %d anos;;erro:fmt.Printf format %d has arg nome of wrong type string">
+<p class="try-task"><strong>Missão:</strong> rode <code>go vet .</code> neste programa <strong>como está</strong> e cole a saída. A missão confere o aviso real do <code>go vet</code>.</p>
+<pre class="script" data-file="main.go" data-cmd="go vet .">
+package main
+
+import "fmt"
+
+func main() {
+	nome := "Ana"
+	idade := 30
+	fmt.Printf("%d tem %d anos\n", nome, idade)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	nome := "Ana"
+	idade := 30
+	fmt.Printf("%d tem %d anos\n", nome, idade)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+main.go:8:14: fmt.Printf format %d has arg nome of wrong type string
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:&quot;%s tem %d anos;;out:Ana tem 30 anos;;semerro">
+<p class="try-task"><strong>Missão:</strong> corrija o formato para o <code>go vet</code> ficar quieto (texto pede <code>%s</code>) e rode <code>go vet . &amp;&amp; go run .</code>. Como o <code>go vet</code> não escreve nada quando está tudo certo, só a saída do programa aparece.</p>
+<pre class="script" data-file="main.go" data-cmd="go vet . &amp;&amp; go run .">
+package main
+
+import "fmt"
+
+func main() {
+	nome := "Ana"
+	idade := 30
+	fmt.Printf("%d tem %d anos\n", nome, idade)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	nome := "Ana"
+	idade := 30
+	fmt.Printf("%s tem %d anos\n", nome, idade)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Ana tem 30 anos
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:func main\(\)\{;;outre:^main\.go$">
+<p class="try-task"><strong>Missão:</strong> salve este código torto e rode <code>gofmt -l .</code> na pasta. Cole a saída: o <code>gofmt</code> deve listar o arquivo que está fora do padrão. (Depois, se quiser, rode <code>gofmt -w main.go</code> e veja o <code>-l</code> ficar vazio.)</p>
+<pre class="script" data-file="main.go" data-cmd="gofmt -l .">
+package main
+import "fmt"
+func main(){
+fmt.Println("formatado")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+import "fmt"
+func main(){
+fmt.Println("formatado")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+main.go
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>gofmt</code> deixa todo código Go com a mesma formatação: <code>-l</code> lista, <code>-d</code> mostra, <code>-w</code> grava.</li>
+<li><code>go vet</code> acha bugs que compilam, como formato errado no <code>Printf</code> e cópia de <code>Mutex</code>.</li>
+<li>Saída vazia dos dois é boa notícia.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

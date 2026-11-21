@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Servidor HTTP em Go com net/http — rotas, curl, 404, 405 e JSON | Guia Go</title>
+<meta name="description" content="Um servidor HTTP em Go só com net/http, em 127.0.0.1: rotas GET /ola/{nome} com r.PathValue, respostas reais do curl -i (200, 404, 405), JSON, Ctrl+C e address already in use.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Servidor HTTP (<span class="hl">net/http</span>)</h1>
+
+<p class="intro">Go já vem com um servidor web completo na biblioteca padrão, o pacote <code>net/http</code>. Sem instalar nada, você escreve um servidor em vinte linhas, com rotas por método (<code>GET</code>, <code>POST</code>) e pedaços variáveis no caminho (<code>/ola/{nome}</code>). Nesta aula o servidor roda só no seu computador e você o testa com o <code>curl</code>.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Registrar rotas com <code>http.HandleFunc</code>, inclusive <code>"GET /ola/{nome}"</code> e <code>r.PathValue</code>.</li><li>Subir o servidor com <code>http.ListenAndServe</code> em <code>127.0.0.1</code>, numa porta alta.</li><li>Ler as respostas reais com <code>curl -i</code>: 200, 404 e 405.</li><li>Responder JSON e encerrar o servidor com <kbd>Ctrl</kbd>+<kbd>C</kbd>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), dentro de <code>~/projetos/go-nivel3</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. O servidor ouviu só em <code>127.0.0.1</code> (o próprio computador), na porta <code>8089</code>, e foi encerrado no fim de cada teste. As linhas de log (hora local) e o cabeçalho <code>Date</code> (sempre em GMT, por isso três horas à frente) trazem a data e a hora da coleta; no seu computador serão as suas. As mensagens do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída.</div>
+
+<hr>
+<h2>A ideia: um balcão de atendimento</h2>
+<p>O servidor é um balcão. Cada <em>rota</em> é um guichê com uma placa (“GET /ola/{nome}”). Quando chega um pedido, o Go olha a placa que combina e chama a função daquele guichê, o <em>handler</em>. O handler escreve a resposta no <code>http.ResponseWriter</code>.</p>
+
+<hr>
+<h2>1. O servidor</h2>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+)
+
+func inicio(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "Bem-vindo ao servidor Go!")
+}
+
+func ola(w http.ResponseWriter, r *http.Request) {
+	nome := r.PathValue("nome")
+	fmt.Fprintf(w, "Olá, %s!\n", nome)
+}
+
+func main() {
+	http.HandleFunc("GET /{$}", inicio)
+	http.HandleFunc("GET /ola/{nome}", ola)
+
+	endereco := "127.0.0.1:8089"
+	log.Println("ouvindo em http://" + endereco)
+	log.Fatal(http.ListenAndServe(endereco, nil))
+}</pre>
+<dl class="anatomy"><dt>"GET /{$}"</dt><dd>só o caminho <code>/</code> exato, só com <code>GET</code>. Sem o <code>{$}</code>, <code>/</code> pegaria qualquer caminho.</dd><dt>"GET /ola/{nome}"</dt><dd>um pedaço variável do caminho, lido com <code>r.PathValue("nome")</code>.</dd><dt>w http.ResponseWriter</dt><dd>onde você escreve a resposta (dá para usar com <code>fmt.Fprintln</code>).</dd><dt>r *http.Request</dt><dd>o pedido: método, caminho, cabeçalhos, corpo.</dd><dt>http.ListenAndServe(endereço, nil)</dt><dd>abre a porta e atende para sempre. Só volta se der erro.</dd></dl>
+<p>Rode num terminal. Ele escreve a linha do log e fica esperando pedidos (o terminal fica “preso”, é normal):</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/http-servidor/ola" data-title="Terminal 1 — servidor">$ go run .
+2026/11/21 09:13:42 ouvindo em http://127.0.0.1:8089</pre>
+<hr>
+<h2>2. Testando com o <code>curl</code></h2>
+<p>Abra <strong>outro</strong> terminal e faça pedidos. O <code>-s</code> deixa o <code>curl</code> quieto; o <code>-i</code> mostra também a linha de status e os cabeçalhos:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/http-servidor/ola" data-title="Terminal 2 — curl">$ curl -s http://127.0.0.1:8089/
+Bem-vindo ao servidor Go!
+$ curl -s http://127.0.0.1:8089/ola/Ana
+Olá, Ana!
+$ curl -i -s http://127.0.0.1:8089/ola/Ana
+HTTP/1.1 200 OK
+Date: Sat, 21 Nov 2026 12:13:44 GMT
+Content-Length: 11
+Content-Type: text/plain; charset=utf-8
+
+Olá, Ana!</pre>
+<p>A primeira linha, <code>HTTP/1.1 200 OK</code>, diz que deu certo. O Go preencheu sozinho o <code>Content-Type</code> (adivinhou texto em UTF-8) e o <code>Content-Length</code>: são 11 bytes, porque o <code>á</code> ocupa dois bytes em UTF-8, mais a quebra de linha.</p>
+<h3>Caminho que não existe e método errado</h3>
+<pre class="term" data-cwd="~/projetos/go-nivel3/http-servidor/ola" data-title="Terminal 2 — curl">$ curl -i -s http://127.0.0.1:8089/nada
+HTTP/1.1 404 Not Found
+Content-Type: text/plain; charset=utf-8
+X-Content-Type-Options: nosniff
+Date: Sat, 21 Nov 2026 12:13:44 GMT
+Content-Length: 19
+
+404 page not found
+$ curl -i -s -X POST http://127.0.0.1:8089/ola/Ana
+HTTP/1.1 405 Method Not Allowed
+Allow: GET, HEAD
+Content-Type: text/plain; charset=utf-8
+X-Content-Type-Options: nosniff
+Date: Sat, 21 Nov 2026 12:13:44 GMT
+Content-Length: 19
+
+Method Not Allowed</pre>
+<p>Para um caminho sem rota, o Go responde <code>404 Not Found</code>. Para a rota certa com o método errado (<code>POST</code> numa rota <code>GET</code>), responde <code>405 Method Not Allowed</code> e ainda avisa no cabeçalho <code>Allow</code> que ali só vale <code>GET, HEAD</code>. Você não escreveu nada disso: vem pronto do roteador do <code>net/http</code>.</p>
+
+<hr>
+<h2>3. Respondendo JSON</h2>
+<p>Para uma API, defina o cabeçalho <code>Content-Type</code> e use o <code>encoding/json</code> (aula <a href="json.html">JSON</a>) direto no <code>w</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+)
+
+type Status struct {
+	Servico string `json:"servico"`
+	Ok      bool   `json:"ok"`
+}
+
+func status(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(Status{Servico: "guia-go", Ok: true})
+}
+
+func main() {
+	http.HandleFunc("GET /status", status)
+	log.Fatal(http.ListenAndServe("127.0.0.1:8089", nil))
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/http-servidor/json" data-title="Terminal 2 — curl">$ curl -i -s http://127.0.0.1:8089/status
+HTTP/1.1 200 OK
+Content-Type: application/json
+Date: Sat, 21 Nov 2026 12:13:48 GMT
+Content-Length: 32
+
+{"servico":"guia-go","ok":true}</pre>
+
+<hr>
+<h2>4. Encerrando o servidor</h2>
+<p>Volte ao terminal do servidor e aperte <kbd>Ctrl</kbd>+<kbd>C</kbd>. Isso manda ao programa o sinal de interrupção (<code>SIGINT</code>). Na coleta, para não depender de alguém apertando a tecla, mandamos o mesmo sinal com <code>timeout -s INT 3</code>, três segundos depois de subir. O <code>go run</code> avisa que o programa terminou por causa do sinal:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/http-servidor/ola" data-title="Terminal 1 — servidor">$ timeout -s INT 3 go run .
+2026/11/21 09:13:56 ouvindo em http://127.0.0.1:8089
+signal: interrupt</pre>
+<div class="tip"><strong>Por que <code>127.0.0.1</code> e porta alta?</strong><p>Com <code>127.0.0.1</code>, só o seu próprio computador acessa o servidor: ninguém da rede chega nele. Escrever só <code>":8089"</code> abriria a porta para a rede inteira. Portas acima de 1024 (como 8089) não pedem permissão de administrador no Linux.</p></div>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Porta ocupada</strong>
+<p>Se já há um programa ouvindo na mesma porta (por exemplo, um servidor que você esqueceu aberto noutro terminal), o <code>ListenAndServe</code> volta na hora com erro, e o <code>log.Fatal</code> escreve e encerra:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/http-servidor/ola" data-title="Terminal 3 — segundo servidor">$ go run .
+2026/11/21 09:13:45 ouvindo em http://127.0.0.1:8089
+2026/11/21 09:13:45 listen tcp 127.0.0.1:8089: bind: address already in use
+exit status 1</pre>
+<p>A mensagem real é <code>bind: address already in use</code> (endereço já em uso). Feche o outro servidor com <kbd>Ctrl</kbd>+<kbd>C</kbd> ou troque a porta.</p></div>
+<div class="cenario"><strong>O <code>curl</code> não conecta</strong>
+<p>Com o servidor desligado, o <code>curl -s</code> não mostra nada (o <code>-s</code> cala até os erros). Acrescente o <code>-S</code> para ver o motivo:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/http-servidor/ola" data-title="Terminal 2 — curl">$ curl -s http://127.0.0.1:8089/
+$ curl -sS http://127.0.0.1:8089/
+curl: (7) Failed to connect to 127.0.0.1 port 8089 after 0 ms: Could not connect to server</pre>
+<p>O <code>Could not connect to server</code> quer dizer que ninguém está ouvindo naquela porta. Confira se o Terminal 1 ainda está com o servidor no ar.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>http.HandleFunc("GET /caminho", f)</code></td><td>Registra a função <code>f</code> para aquele método e caminho.</td></tr>
+<tr><td><code>"GET /{$}"</code></td><td>Só a raiz <code>/</code>, exata.</td></tr>
+<tr><td><code>"GET /ola/{nome}"</code> + <code>r.PathValue("nome")</code></td><td>Pedaço variável do caminho.</td></tr>
+<tr><td><code>fmt.Fprintln(w, …)</code></td><td>Escreve no corpo da resposta.</td></tr>
+<tr><td><code>w.Header().Set("Content-Type", …)</code></td><td>Define um cabeçalho (antes de escrever o corpo).</td></tr>
+<tr><td><code>http.ListenAndServe("127.0.0.1:8089", nil)</code></td><td>Sobe o servidor só para o próprio computador.</td></tr>
+<tr><td><code>curl -i -s URL</code></td><td>Faz o pedido e mostra status, cabeçalhos e corpo.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+<div class="exercise"><h3>1. Registre a rota</h3><p>Complete para registrar um handler:</p><div class="ex-code">http.<input data-answer="HandleFunc" aria-label="resposta">("GET /ping", ping)</div></div>
+<div class="exercise"><h3>2. Pedaço variável</h3><p>Complete para ler o <code>{{nome}}</code> da rota <code>GET /ola/{{nome}}</code>:</p><div class="ex-code">nome := r.<input data-answer="PathValue" aria-label="resposta">("nome")</div></div>
+<div class="exercise"><h3>3. Suba o servidor</h3><p>Complete para ouvir só no próprio computador, porta 8089:</p><div class="ex-code">http.ListenAndServe("<input data-answer="127.0.0.1:8089" aria-label="endereço">", nil)</div></div>
+<div class="mc" data-answer="2"><p class="mc-q">4. Um <code>POST</code> na rota <code>GET /ola/{{nome}}</code> devolveu qual status?</p>
+<label><input type="radio" name="q4"> <code>404 Not Found</code></label>
+<label><input type="radio" name="q4"> <code>405 Method Not Allowed</code></label>
+<label><input type="radio" name="q4"> <code>200 OK</code></label>
+<label><input type="radio" name="q4"> <code>500 Internal Server Error</code></label></div>
+<div class="mc" data-answer="2"><p class="mc-q">5. Por que usar <code>127.0.0.1:8089</code> em vez de <code>:8089</code> enquanto estuda?</p>
+<label><input type="radio" name="q5"> Porque <code>:8089</code> não compila</label>
+<label><input type="radio" name="q5"> Porque <code>127.0.0.1</code> deixa só o seu computador acessar; <code>:8089</code> abre para a rede</label>
+<label><input type="radio" name="q5"> Porque é mais rápido</label>
+<label><input type="radio" name="q5"> Porque o <code>curl</code> só entende números</label></div>
+<div class="mc" data-answer="2"><p class="mc-q">6. O que quer dizer <code>bind: address already in use</code>?</p>
+<label><input type="radio" name="q6"> Que o código tem erro de sintaxe</label>
+<label><input type="radio" name="q6"> Que outro programa já está ouvindo naquela porta</label>
+<label><input type="radio" name="q6"> Que falta internet</label>
+<label><input type="radio" name="q6"> Que o <code>curl</code> não está instalado</label></div>
+
+<div class="trycmd" data-goal="src:&quot;GET /tchau&quot;;;out:Até logo!;;semerro">
+<p class="try-task"><strong>Missão:</strong> acrescente a rota <code>GET /tchau</code>, que responde <code>Até logo!</code>. Suba o servidor com <code>go run .</code> num terminal e, <strong>noutro</strong>, rode <code>curl -s http://127.0.0.1:8089/tchau</code>. Cole a resposta do <code>curl</code> e depois encerre o servidor com <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+<pre class="script" data-file="main.go" data-cmd="go run . (e, noutro terminal, curl -s http://127.0.0.1:8089/tchau)">
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "Bem-vindo ao servidor Go!")
+	})
+	// crie aqui a rota GET /tchau, que responde "Até logo!"
+	log.Fatal(http.ListenAndServe("127.0.0.1:8089", nil))
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "Bem-vindo ao servidor Go!")
+	})
+	http.HandleFunc("GET /tchau", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "Até logo!")
+	})
+	log.Fatal(http.ListenAndServe("127.0.0.1:8089", nil))
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Até logo!
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:ListenAndServe;;erro:bind: address already in use">
+<p class="try-task"><strong>Missão:</strong> suba este servidor com <code>go run .</code> e, com ele ainda aberto, rode <code>go run .</code> de novo noutro terminal, na mesma pasta. Cole o que o <strong>segundo</strong> terminal respondeu (a data e a hora serão as suas). Depois feche o primeiro com <kbd>Ctrl</kbd>+<kbd>C</kbd>.</p>
+<pre class="script" data-file="main.go" data-cmd="go run . (duas vezes, em dois terminais)">
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+)
+
+func inicio(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "Bem-vindo ao servidor Go!")
+}
+
+func ola(w http.ResponseWriter, r *http.Request) {
+	nome := r.PathValue("nome")
+	fmt.Fprintf(w, "Olá, %s!\n", nome)
+}
+
+func main() {
+	http.HandleFunc("GET /{$}", inicio)
+	http.HandleFunc("GET /ola/{nome}", ola)
+
+	endereco := "127.0.0.1:8089"
+	log.Println("ouvindo em http://" + endereco)
+	log.Fatal(http.ListenAndServe(endereco, nil))
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+)
+
+func inicio(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "Bem-vindo ao servidor Go!")
+}
+
+func ola(w http.ResponseWriter, r *http.Request) {
+	nome := r.PathValue("nome")
+	fmt.Fprintf(w, "Olá, %s!\n", nome)
+}
+
+func main() {
+	http.HandleFunc("GET /{$}", inicio)
+	http.HandleFunc("GET /ola/{nome}", ola)
+
+	endereco := "127.0.0.1:8089"
+	log.Println("ouvindo em http://" + endereco)
+	log.Fatal(http.ListenAndServe(endereco, nil))
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+2026/11/21 09:20:00 ouvindo em http://127.0.0.1:8089
+2026/11/21 09:20:00 listen tcp 127.0.0.1:8089: bind: address already in use
+exit status 1
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>net/http</code> já traz servidor e roteador: <code>http.HandleFunc("GET /caminho", f)</code> e <code>http.ListenAndServe</code>.</li>
+<li>Rotas aceitam método e pedaços variáveis (<code>{nome}</code>, lido com <code>r.PathValue</code>); 404 e 405 vêm prontos.</li>
+<li>Para estudar, ouça em <code>127.0.0.1</code> numa porta alta e encerre com <kbd>Ctrl</kbd>+<kbd>C</kbd>.</li>
+<li>Porta já usada dá <code>bind: address already in use</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

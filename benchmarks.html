@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Benchmarks em Go — go test -bench, b.Loop e -benchmem | Guia Go</title>
+<meta name="description" content="Benchmarks em Go com saída real: BenchmarkXxx com b.Loop(), go test -bench=., ns/op, -benchmem com B/op e allocs/op, -count e a comparação += contra strings.Builder.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Benchmarks</span></h1>
+
+<p class="intro">Um benchmark mede quanto tempo (e quanta memória) um pedaço de código gasta. Em Go, ele mora no mesmo arquivo <code>_test.go</code> dos testes (aula <a href="go-test.html">go test</a>) e roda com <code>go test -bench</code>. Nesta aula você compara dois jeitos de juntar textos e vê, com números reais, por que o <code>strings.Builder</code> existe.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Escrever uma função <code>BenchmarkXxx(b *testing.B)</code> com <code>for b.Loop()</code>.</li><li>Rodar com <code>go test -bench=.</code> e ler cada coluna da saída.</li><li>Medir memória com <code>-benchmem</code> (<code>B/op</code> e <code>allocs/op</code>).</li><li>Filtrar benchmarks e repetir medições com <code>-count</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), dentro de <code>~/projetos/go-nivel3</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. Os tempos de benchmark ficaram como saíram (são reais, mas dependem do processador e do momento): no seu computador os números serão outros. O que vale comparar é a <strong>proporção</strong> entre as linhas. As mensagens do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída.</div>
+
+<hr>
+<h2>1. O código e os benchmarks</h2>
+<p>Duas funções que fazem a mesma coisa: juntar uma lista de textos. Uma usa <code>+=</code>, a outra usa <code>strings.Builder</code>:</p>
+<pre class="file" data-file="juntar.go">package juntar
+
+import "strings"
+
+func ComMais(partes []string) string {
+	s := ""
+	for _, p := range partes {
+		s += p
+	}
+	return s
+}
+
+func ComBuilder(partes []string) string {
+	var b strings.Builder
+	for _, p := range partes {
+		b.WriteString(p)
+	}
+	return b.String()
+}</pre>
+<p>No arquivo de teste, um teste comum confere que as duas dão o mesmo resultado, e dois benchmarks medem cada uma, com uma lista de 100 pedaços:</p>
+<pre class="file" data-file="juntar_test.go">package juntar
+
+import "testing"
+
+var partes = make100()
+
+func make100() []string {
+	p := make([]string, 100)
+	for i := range p {
+		p[i] = "go"
+	}
+	return p
+}
+
+func TestIguais(t *testing.T) {
+	if ComMais(partes) != ComBuilder(partes) {
+		t.Fatal("resultados diferentes")
+	}
+}
+
+func BenchmarkComMais(b *testing.B) {
+	for b.Loop() {
+		ComMais(partes)
+	}
+}
+
+func BenchmarkComBuilder(b *testing.B) {
+	for b.Loop() {
+		ComBuilder(partes)
+	}
+}</pre>
+<dl class="anatomy"><dt>func BenchmarkComMais</dt><dd>o nome começa com <code>Benchmark</code> e o resto com maiúscula; fica num arquivo <code>_test.go</code>.</dd><dt>b *testing.B</dt><dd>o controle do benchmark.</dd><dt>for b.Loop() { … }</dt><dd>repete o corpo quantas vezes for preciso para uma medição confiável (Go 1.24+). Em código antigo você verá <code>for i := 0; i &lt; b.N; i++</code>.</dd></dl>
+<p>Um <code>go test</code> comum roda só os testes, não os benchmarks:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/benchmarks/juntar">$ go test .
+ok  	exemplo/juntar	0.002s</pre>
+
+<hr>
+<h2>2. Rodando: <code>go test -bench=.</code></h2>
+<p>O <code>-bench</code> recebe uma expressão regular com os nomes; o <code>.</code> pega todos:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/benchmarks/juntar">$ go test -bench=.
+goos: linux
+goarch: amd64
+pkg: exemplo/juntar
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkComMais-8      	  293248	      4152 ns/op
+BenchmarkComBuilder-8   	 2663337	       450.9 ns/op
+PASS
+ok  	exemplo/juntar	2.424s</pre>
+<p>As quatro primeiras linhas descrevem o ambiente (sistema, arquitetura, pacote e processador). Depois, uma linha por benchmark:</p>
+<div class="table-wrap"><table class="ref">
+<tr><th>Pedaço</th><th>Significado</th></tr>
+<tr><td><code>BenchmarkComMais-8</code></td><td>Nome do benchmark; o <code>-8</code> é quantas CPUs o Go usou (<code>GOMAXPROCS</code>).</td></tr>
+<tr><td><code>293248</code></td><td>Quantas vezes o corpo do <code>for b.Loop()</code> rodou.</td></tr>
+<tr><td><code>4152 ns/op</code></td><td>Tempo médio por volta, em nanossegundos (bilionésimos de segundo).</td></tr>
+</table></div>
+<p>Nesta coleta, juntar com <code>+=</code> levou cerca de 4152 ns e com <code>strings.Builder</code> cerca de 451 ns: umas nove vezes mais rápido.</p>
+
+<hr>
+<h2>3. Memória: <code>-benchmem</code></h2>
+<pre class="term" data-cwd="~/projetos/go-nivel3/benchmarks/juntar">$ go test -bench=. -benchmem
+goos: linux
+goarch: amd64
+pkg: exemplo/juntar
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkComMais-8      	  289062	      4140 ns/op	   10736 B/op	      99 allocs/op
+BenchmarkComBuilder-8   	 2626416	       445.9 ns/op	     504 B/op	       6 allocs/op
+PASS
+ok  	exemplo/juntar	2.372s</pre>
+<p>Duas colunas novas: <code>B/op</code> (bytes reservados por volta) e <code>allocs/op</code> (quantas vezes pediu memória). O <code>+=</code> pediu memória 99 vezes, porque cada soma cria um texto novo e copia tudo. O <code>Builder</code> cresce aos poucos e pediu só 6 vezes. Essa é a explicação da diferença de tempo.</p>
+
+<hr>
+<h2>4. Filtrando e repetindo</h2>
+<p>Para rodar só um benchmark, passe parte do nome:</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/benchmarks/juntar">$ go test -bench=Builder -benchmem
+goos: linux
+goarch: amd64
+pkg: exemplo/juntar
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkComBuilder-8   	 2740524	       437.4 ns/op	     504 B/op	       6 allocs/op
+PASS
+ok  	exemplo/juntar	1.203s</pre>
+<p>Medições variam. Com <code>-count=2</code> cada benchmark roda duas vezes, e o <code>-run=^$</code> pula os testes comuns (nenhum nome casa com “vazio”):</p>
+<pre class="term" data-cwd="~/projetos/go-nivel3/benchmarks/juntar">$ go test -run=^$ -bench=. -benchmem -count=2
+goos: linux
+goarch: amd64
+pkg: exemplo/juntar
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkComMais-8      	  277629	      4096 ns/op	   10736 B/op	      99 allocs/op
+BenchmarkComMais-8      	  287457	      4046 ns/op	   10736 B/op	      99 allocs/op
+BenchmarkComBuilder-8   	 2770136	       433.1 ns/op	     504 B/op	       6 allocs/op
+BenchmarkComBuilder-8   	 2721852	       440.0 ns/op	     504 B/op	       6 allocs/op
+PASS
+ok  	exemplo/juntar	4.704s</pre>
+<p>Repare que os números mudam um pouco de uma rodada para outra, mas a proporção se mantém. Para comparar versões do seu código com estatística, a ferramenta <code>benchstat</code> lê várias rodadas e diz se a diferença é real.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Rodei <code>go test</code> e o benchmark não apareceu</strong>
+<p>Benchmarks só rodam com <code>-bench</code>. Sem ele, o <code>go test</code> só roda os <code>TestXxx</code> (veja a seção 1).</p></div>
+<div class="cenario"><strong>Números muito diferentes a cada vez</strong>
+<p>Outros programas abertos, economia de energia e aquecimento do processador mexem nos tempos. Feche o que puder, use <code>-count</code> e compare na mesma máquina, nunca entre computadores diferentes.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você digita</th><th>O que faz</th></tr>
+<tr><td><code>go test -bench=.</code></td><td>Roda todos os benchmarks (e os testes).</td></tr>
+<tr><td><code>go test -bench=Nome</code></td><td>Só os benchmarks cujo nome casa com <code>Nome</code>.</td></tr>
+<tr><td><code>-benchmem</code></td><td>Mostra <code>B/op</code> e <code>allocs/op</code>.</td></tr>
+<tr><td><code>-count=N</code></td><td>Repete cada benchmark N vezes.</td></tr>
+<tr><td><code>-run=^$</code></td><td>Pula os testes comuns.</td></tr>
+<tr><td><code>for b.Loop() { … }</code></td><td>O laço do benchmark (Go 1.24+).</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+<div class="exercise"><h3>1. O nome</h3><p>Complete o começo do nome de um benchmark:</p><div class="ex-code">func <input data-answer="Benchmark" aria-label="resposta">Soma(b *testing.B)</div></div>
+<div class="exercise"><h3>2. O laço</h3><p>Complete o laço do benchmark:</p><div class="ex-code">for b.<input data-answer="Loop" aria-label="resposta">() {</div></div>
+<div class="exercise"><h3>3. Memória</h3><p>Qual opção mostra <code>B/op</code> e <code>allocs/op</code>?</p><div class="ex-code">go test -bench=. <input data-answer="-benchmem" aria-label="opção"></div></div>
+<div class="mc" data-answer="2"><p class="mc-q">4. Na linha <code>BenchmarkComMais-8  293248  4152 ns/op</code>, o que é o <code>4152 ns/op</code>?</p>
+<label><input type="radio" name="q4"> O total de voltas</label>
+<label><input type="radio" name="q4"> O tempo médio de cada volta, em nanossegundos</label>
+<label><input type="radio" name="q4"> A memória usada</label>
+<label><input type="radio" name="q4"> O número de CPUs</label></div>
+<div class="mc" data-answer="2"><p class="mc-q">5. Por que o <code>+=</code> foi mais lento que o <code>strings.Builder</code>?</p>
+<label><input type="radio" name="q5"> Porque <code>+=</code> não funciona com textos</label>
+<label><input type="radio" name="q5"> Porque cada <code>+=</code> cria um texto novo e copia tudo: 99 pedidos de memória contra 6</label>
+<label><input type="radio" name="q5"> Porque o <code>Builder</code> usa mais CPUs</label>
+<label><input type="radio" name="q5"> Porque o benchmark estava errado</label></div>
+<div class="mc" data-answer="2"><p class="mc-q">6. Você roda <code>go test</code> sem opções. Os benchmarks rodam?</p>
+<label><input type="radio" name="q6"> Sim, sempre</label>
+<label><input type="radio" name="q6"> Não: só com <code>-bench</code></label>
+<label><input type="radio" name="q6"> Só se o arquivo se chamar <code>bench.go</code></label>
+<label><input type="radio" name="q6"> Só no Linux</label></div>
+
+<div class="trycmd" data-goal="src:func BenchmarkSoma\(b \*testing\.B\);;src:b\.Loop\(\);;outre:^BenchmarkSoma-\d+\s+\d+\s+[\d.]+ ns/op;;outre:^PASS$;;semerro">
+<p class="try-task"><strong>Missão:</strong> numa pasta nova, rode <code>go mod init soma</code>, salve este arquivo como <code>soma_test.go</code> e escreva a função <code>BenchmarkSoma</code>, chamando <code>Soma(1000)</code> dentro de <code>for b.Loop()</code>. Rode <code>go test -bench=.</code> e cole a saída. Os números serão os do seu computador.</p>
+<pre class="script" data-file="soma_test.go" data-cmd="go test -bench=.">
+package soma
+
+import "testing"
+
+func Soma(n int) int {
+	total := 0
+	for i := 1; i &lt;= n; i++ {
+		total += i
+	}
+	return total
+}
+
+// escreva aqui a função BenchmarkSoma, que chama Soma(1000) dentro de "for b.Loop()"
+</pre>
+<pre class="solucao" data-file="soma_test.go">
+package soma
+
+import "testing"
+
+func Soma(n int) int {
+	total := 0
+	for i := 1; i &lt;= n; i++ {
+		total += i
+	}
+	return total
+}
+
+func BenchmarkSoma(b *testing.B) {
+	for b.Loop() {
+		Soma(1000)
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="soma_test.go" hidden>
+goos: linux
+goarch: amd64
+pkg: soma
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkSoma-8   	 4480207	       265.8 ns/op
+PASS
+ok  	soma	1.195s
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:make\(\[\]int, 0, n\);;outre:^BenchmarkSemCapacidade-\d+\s+\d+\s+[\d.]+ ns/op\s+\d+ B/op\s+\d+ allocs/op;;outre:^BenchmarkComCapacidade-\d+\s+\d+\s+[\d.]+ ns/op\s+\d+ B/op\s+\d+ allocs/op;;semerro">
+<p class="try-task"><strong>Missão:</strong> este arquivo (salve como <code>fatia_test.go</code>, num módulo <code>go mod init fatia</code>) compara um <code>append</code> sem capacidade com outro que já reserva espaço com <code>make([]int, 0, n)</code>. Rode com <code>-benchmem</code> e cole a saída. A missão confere se as duas linhas trazem as colunas <code>B/op</code> e <code>allocs/op</code>. Compare você mesmo: na coleta, a versão sem capacidade fez 12 pedidos de memória e a com capacidade, nenhum (o compilador conseguiu guardar essa fatia na pilha, porque ela não é usada depois).</p>
+<pre class="script" data-file="fatia_test.go" data-cmd="go test -bench=. -benchmem">
+package fatia
+
+import "testing"
+
+func SemCapacidade(n int) []int {
+	var s []int
+	for i := 0; i &lt; n; i++ {
+		s = append(s, i)
+	}
+	return s
+}
+
+func ComCapacidade(n int) []int {
+	s := make([]int, 0, n)
+	for i := 0; i &lt; n; i++ {
+		s = append(s, i)
+	}
+	return s
+}
+
+func BenchmarkSemCapacidade(b *testing.B) {
+	for b.Loop() {
+		SemCapacidade(1000)
+	}
+}
+
+func BenchmarkComCapacidade(b *testing.B) {
+	for b.Loop() {
+		ComCapacidade(1000)
+	}
+}
+</pre>
+<pre class="solucao" data-file="fatia_test.go">
+package fatia
+
+import "testing"
+
+func SemCapacidade(n int) []int {
+	var s []int
+	for i := 0; i &lt; n; i++ {
+		s = append(s, i)
+	}
+	return s
+}
+
+func ComCapacidade(n int) []int {
+	s := make([]int, 0, n)
+	for i := 0; i &lt; n; i++ {
+		s = append(s, i)
+	}
+	return s
+}
+
+func BenchmarkSemCapacidade(b *testing.B) {
+	for b.Loop() {
+		SemCapacidade(1000)
+	}
+}
+
+func BenchmarkComCapacidade(b *testing.B) {
+	for b.Loop() {
+		ComCapacidade(1000)
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="fatia_test.go" hidden>
+goos: linux
+goarch: amd64
+pkg: fatia
+cpu: Intel(R) Xeon(R) Processor
+BenchmarkSemCapacidade-8   	  194030	      6462 ns/op	   25208 B/op	      12 allocs/op
+BenchmarkComCapacidade-8   	 3160750	       379.3 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	fatia	2.457s
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Benchmarks são <code>func BenchmarkXxx(b *testing.B)</code> com <code>for b.Loop()</code>, num arquivo <code>_test.go</code>.</li>
+<li><code>go test -bench=.</code> mostra voltas e <code>ns/op</code>; <code>-benchmem</code> soma <code>B/op</code> e <code>allocs/op</code>.</li>
+<li>Os números mudam de máquina para máquina: compare proporções, na mesma máquina, com <code>-count</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

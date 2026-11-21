@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Channels em Go — make(chan), enviar, receber, close e range | Guia Go</title>
+<meta name="description" content="Channels em Go com saída real: canal sem e com buffer, close e range, e os erros reais all goroutines are asleep - deadlock! e send on closed channel.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Channels</span></h1>
+
+<p class="intro">Um channel (canal) é um cano por onde uma goroutine manda valores para outra. Ele resolve dois problemas de uma vez: passa dados e faz uma goroutine esperar a outra. É o jeito “Go” de coordenar concorrência: <em>não comunique compartilhando memória; compartilhe memória comunicando</em>.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Criar um canal com <code>make(chan T)</code>, enviar com <code>ch &lt;- v</code> e receber com <code>&lt;-ch</code>.</li><li>A diferença entre canal sem buffer e com buffer (<code>make(chan T, n)</code>).</li><li>Fechar com <code>close</code> e percorrer com <code>for … range</code>.</li><li>Os erros reais: <code>all goroutines are asleep - deadlock!</code> e <code>send on closed channel</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), dentro de <code>~/projetos/go-nivel3</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>.  As mensagens do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída.</div>
+
+<hr>
+<h2>A ideia: um cano entre duas goroutines</h2>
+<p>Quem envia (<code>ch &lt;- v</code>) coloca um valor numa ponta. Quem recebe (<code>&lt;-ch</code>) tira na outra. Num canal <strong>sem buffer</strong>, o envio fica parado até alguém receber, e o recebimento fica parado até alguém enviar. É um aperto de mão: os dois lados se encontram.</p>
+
+<hr>
+<h2>1. Enviar e receber</h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	ch := make(chan string)
+
+	go func() {
+		ch &lt;- "mensagem da goroutine"
+	}()
+
+	msg := &lt;-ch
+	fmt.Println("recebi:", msg)
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/channels/basico">$ go run .
+recebi: mensagem da goroutine</pre>
+<p>Diferente da aula de <a href="goroutines.html">goroutines</a>, aqui não precisamos de <code>time.Sleep</code>: o <code>msg := &lt;-ch</code> faz o <code>main</code> esperar até a goroutine enviar. A espera vem de graça com o canal.</p>
+<dl class="anatomy"><dt>make(chan string)</dt><dd>cria um canal que transporta valores do tipo <code>string</code>.</dd><dt>ch &lt;- "…"</dt><dd>envia um valor para o canal (a seta aponta <em>para dentro</em> do canal).</dd><dt>&lt;-ch</dt><dd>recebe um valor do canal (a seta sai <em>de dentro</em> do canal).</dd></dl>
+
+<hr>
+<h2>2. Canal com buffer</h2>
+<p>Com um número no <code>make</code>, o canal ganha um buffer: aceita até aquela quantidade de valores sem ninguém receber. <code>len</code> diz quantos estão guardados; <code>cap</code>, quantos cabem:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	ch := make(chan int, 3)
+	ch &lt;- 10
+	ch &lt;- 20
+	fmt.Println("len:", len(ch), "cap:", cap(ch))
+	fmt.Println(&lt;-ch)
+	fmt.Println(&lt;-ch)
+	fmt.Println("len:", len(ch), "cap:", cap(ch))
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/channels/buffer">$ go run .
+len: 2 cap: 3
+10
+20
+len: 0 cap: 3</pre>
+<p>Os valores saem na mesma ordem em que entraram (primeiro a entrar, primeiro a sair). Aqui tudo roda numa goroutine só: funciona porque o buffer tinha espaço. Com o buffer cheio, o próximo envio ficaria esperando.</p>
+
+<hr>
+<h2>3. Fechar e percorrer com <code>range</code></h2>
+<p>Quem envia pode avisar “acabou” com <code>close(ch)</code>. Do outro lado, o <code>for v := range ch</code> recebe até o canal ser fechado e esvaziado. O tipo <code>chan&lt;- int</code> no parâmetro diz que a função <strong>só envia</strong>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func produtor(ch chan&lt;- int) {
+	for i := 1; i &lt;= 3; i++ {
+		ch &lt;- i * i
+	}
+	close(ch)
+}
+
+func main() {
+	ch := make(chan int)
+	go produtor(ch)
+	for v := range ch {
+		fmt.Println("valor:", v)
+	}
+	v, ok := &lt;-ch
+	fmt.Println("depois de fechado:", v, ok)
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/channels/range-close">$ go run .
+valor: 1
+valor: 4
+valor: 9
+depois de fechado: 0 false</pre>
+<p>Depois de fechado e vazio, receber não trava: devolve o valor zero do tipo (<code>0</code>) e <code>ok</code> igual a <code>false</code>. É assim que se descobre que um canal foi fechado.</p>
+<div class="tip"><strong>Quem fecha é quem envia</strong><p>Feche o canal do lado que envia, e só quando não houver mais nada para mandar. Quem recebe nunca deveria fechar. Também não é obrigatório fechar todo canal: feche quando o outro lado precisa saber que acabou (como no <code>range</code>).</p></div>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Deadlock: todo mundo esperando</strong>
+<p>Num canal sem buffer, enviar no <code>main</code> sem nenhuma goroutine para receber trava para sempre. O Go percebe que <em>nenhuma</em> goroutine pode avançar e derruba o programa:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	ch := make(chan int)
+	ch &lt;- 1
+	fmt.Println(&lt;-ch)
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/channels/deadlock">$ go run .
+fatal error: all goroutines are asleep - deadlock!
+
+goroutine 1 [chan send]:
+main.main()
+	/home/ana/projetos/go-nivel3/channels/deadlock/main.go:7 +0x36
+exit status 2</pre>
+<p>Leia de cima para baixo: o erro (<code>all goroutines are asleep - deadlock!</code>), qual goroutine travou e onde (<code>goroutine 1 [chan send]</code>, ou seja, parada num envio) e a linha do arquivo (<code>main.go:7</code>). O <code>exit status 2</code> é o <code>go run</code> contando que o programa terminou com erro.</p></div>
+<div class="cenario"><strong>Enviar num canal fechado</strong>
+<p>Depois do <code>close</code>, qualquer envio é um <code>panic</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+func main() {
+	ch := make(chan int, 1)
+	close(ch)
+	ch &lt;- 1
+}</pre>
+<pre class="term" data-cwd="~/projetos/go-nivel3/channels/fechado">$ go run .
+panic: send on closed channel
+
+goroutine 1 [running]:
+main.main()
+	/home/ana/projetos/go-nivel3/channels/fechado/main.go:6 +0x3a
+exit status 2</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>ch := make(chan T)</code></td><td>Canal sem buffer: envio e recebimento se esperam.</td></tr>
+<tr><td><code>ch := make(chan T, n)</code></td><td>Canal com buffer de <code>n</code> valores.</td></tr>
+<tr><td><code>ch &lt;- v</code></td><td>Envia <code>v</code>.</td></tr>
+<tr><td><code>v := &lt;-ch</code></td><td>Recebe um valor.</td></tr>
+<tr><td><code>v, ok := &lt;-ch</code></td><td><code>ok</code> é <code>false</code> se o canal está fechado e vazio.</td></tr>
+<tr><td><code>close(ch)</code></td><td>Avisa que não vem mais nada. Enviar depois disso dá <code>panic</code>.</td></tr>
+<tr><td><code>for v := range ch</code></td><td>Recebe até o canal ser fechado.</td></tr>
+<tr><td><code>chan&lt;- T</code> / <code>&lt;-chan T</code></td><td>Canal só de envio / só de recebimento (em parâmetros).</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+<div class="exercise"><h3>1. Crie o canal</h3><p>Complete para criar um canal de inteiros:</p><div class="ex-code">ch := <input data-answer="make" aria-label="resposta">(chan int)</div></div>
+<div class="exercise"><h3>2. Envie</h3><p>Complete para enviar o número 7 para o canal:</p><div class="ex-code">ch <input data-answer="&lt;-" aria-label="operador"> 7</div></div>
+<div class="exercise"><h3>3. Feche</h3><p>Complete para avisar que não vem mais nada:</p><div class="ex-code"><input data-answer="close" aria-label="resposta">(ch)</div></div>
+<div class="mc" data-answer="2"><p class="mc-q">4. Por que o programa da seção 1 não precisou de <code>time.Sleep</code>?</p>
+<label><input type="radio" name="q4"> Porque canais são mais rápidos que goroutines</label>
+<label><input type="radio" name="q4"> Porque o <code>&lt;-ch</code> faz o <code>main</code> esperar até a goroutine enviar</label>
+<label><input type="radio" name="q4"> Porque o Go 1.27 espera as goroutines sozinho</label>
+<label><input type="radio" name="q4"> Porque a mensagem era curta</label></div>
+<div class="mc" data-answer="2"><p class="mc-q">5. O que a linha <code>goroutine 1 [chan send]:</code> do deadlock quer dizer?</p>
+<label><input type="radio" name="q5"> Que a goroutine 1 terminou com sucesso</label>
+<label><input type="radio" name="q5"> Que a goroutine 1 (o <code>main</code>) estava parada tentando enviar num canal</label>
+<label><input type="radio" name="q5"> Que o canal foi fechado</label>
+<label><input type="radio" name="q5"> Que o Go traduziu a mensagem</label></div>
+<div class="mc" data-answer="3"><p class="mc-q">6. Depois de <code>close(ch)</code> e de o canal esvaziar, o que <code>v, ok := &lt;-ch</code> devolve?</p>
+<label><input type="radio" name="q6"> Trava para sempre</label>
+<label><input type="radio" name="q6"> Um <code>panic</code></label>
+<label><input type="radio" name="q6"> O valor zero do tipo e <code>ok == false</code></label>
+<label><input type="radio" name="q6"> O último valor enviado e <code>ok == true</code></label></div>
+
+<div class="trycmd" data-goal="src:ch &lt;- soma;;src:&lt;-ch;;out:soma: 15;;semerro">
+<p class="try-task"><strong>Missão:</strong> complete o programa: a goroutine deve <strong>enviar</strong> a soma pelo canal (<code>ch &lt;- soma</code>) e o <code>main</code> deve <strong>receber</strong> (<code>&lt;-ch</code>) e mostrar <code>soma: 15</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	ch := make(chan int)
+
+	go func() {
+		soma := 0
+		for i := 1; i &lt;= 5; i++ {
+			soma += i
+		}
+		// envie a soma pelo canal
+	}()
+
+	// receba do canal e mostre "soma: &lt;valor&gt;"
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	ch := make(chan int)
+
+	go func() {
+		soma := 0
+		for i := 1; i &lt;= 5; i++ {
+			soma += i
+		}
+		ch &lt;- soma
+	}()
+
+	fmt.Println("soma:", &lt;-ch)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+soma: 15
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:close\(ch\);;src:range ch;;outre:^item: a\nitem: b\nitem: c$;;semerro">
+<p class="try-task"><strong>Missão:</strong> feche o canal depois do último envio e, no <code>main</code>, percorra-o com <code>for s := range ch</code> mostrando <code>item: a</code>, <code>item: b</code> e <code>item: c</code>. Como uma goroutine só envia, a ordem aqui é garantida.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	ch := make(chan string)
+
+	go func() {
+		for _, s := range []string{"a", "b", "c"} {
+			ch &lt;- s
+		}
+		// feche o canal aqui
+	}()
+
+	// percorra o canal e mostre "item: &lt;valor&gt;" para cada um
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	ch := make(chan string)
+
+	go func() {
+		for _, s := range []string{"a", "b", "c"} {
+			ch &lt;- s
+		}
+		close(ch)
+	}()
+
+	for s := range ch {
+		fmt.Println("item:", s)
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+item: a
+item: b
+item: c
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:ch &lt;- &quot;oi&quot;;;erro:all goroutines are asleep - deadlock!">
+<p class="try-task"><strong>Missão:</strong> rode este programa <strong>como está</strong> e cole a saída. Ele envia num canal sem buffer sem ninguém para receber; a missão confere se apareceu a mensagem real de deadlock.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	ch := make(chan string)
+	ch &lt;- "oi"
+	fmt.Println(&lt;-ch)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	ch := make(chan string)
+	ch &lt;- "oi"
+	fmt.Println(&lt;-ch)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+fatal error: all goroutines are asleep - deadlock!
+
+goroutine 1 [chan send]:
+main.main()
+	/home/ana/projetos/go-nivel3/missoes/ch3/main.go:7 +0x36
+exit status 2
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Canais passam valores entre goroutines e, de quebra, fazem uma esperar a outra.</li>
+<li>Sem buffer, envio e recebimento se encontram; com buffer, o envio só espera quando está cheio.</li>
+<li>Quem envia fecha com <code>close</code>; quem recebe usa <code>range</code> ou <code>v, ok := &lt;-ch</code>.</li>
+<li>Todo mundo esperando dá <code>all goroutines are asleep - deadlock!</code>; enviar em canal fechado dá <code>panic</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
