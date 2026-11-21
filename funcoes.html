@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Funções em Go — parâmetros, return, variádicas e funções anônimas | Guia Go</title>
+<meta name="description" content="Funções em Go: declarar com func, parâmetros com tipo, return, funções variádicas (...), funções como valor, closures e passagem por valor.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Funções</span></h1>
+
+<p class="intro">Uma função é um <strong>pedaço de código com nome</strong>, que recebe valores (parâmetros), faz um trabalho e pode devolver um resultado. Em vez de repetir o mesmo código, você chama a função. Em Go, os tipos dos parâmetros e do retorno são escritos <em>depois</em> do nome.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Declarar <code>func nome(param tipo) tipoRetorno</code> e usar <code>return</code>.</li><li>Funções variádicas (<code>...int</code>), funções guardadas em variáveis e closures.</li><li>Por que mudar um parâmetro <code>int</code> não muda a variável de fora, mas mudar um slice muda.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Declarando e chamando</h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func saudar(nome string) {
+	fmt.Println("Olá,", nome)
+}
+
+func dobro(x int) int {
+	return x * 2
+}
+
+func area(largura, altura float64) float64 {
+	return largura * altura
+}
+
+func main() {
+	saudar("Ana")
+	fmt.Println(dobro(21))
+	fmt.Println(area(3, 2.5))
+}</pre>
+<pre class="term" data-cwd="~/projetos/funcoes">$ go run main.go
+Olá, Ana
+42
+7.5</pre>
+<dl class="anatomy"><dt>func</dt><dd>“vou declarar uma função”.</dd><dt>dobro</dt><dd>o nome.</dd><dt>(x int)</dt><dd>o parâmetro <code>x</code>, do tipo <code>int</code>.</dd><dt>int</dt><dd>o tipo do valor devolvido.</dd><dt>return x * 2</dt><dd>devolve o resultado e sai da função.</dd></dl>
+<p>Parâmetros seguidos do mesmo tipo podem dividir o tipo: <code>(largura, altura float64)</code>. A função <code>saudar</code> não devolve nada, então não tem tipo de retorno.</p>
+<hr>
+<h2>2. Variádicas, funções como valor e closures</h2>
+<p>Com <code>...int</code> a função aceita quantos inteiros você quiser (dentro dela, <code>numeros</code> é um slice). Para passar um slice inteiro, use <code>lista...</code>. Funções também são valores: dá para guardar numa variável, passar para outra função e até devolver uma função que “lembra” de uma variável (uma <em>closure</em>):</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func somar(numeros ...int) int {
+	total := 0
+	for _, n := range numeros {
+		total += n
+	}
+	return total
+}
+
+func aplicar(x int, f func(int) int) int {
+	return f(x)
+}
+
+func contador() func() int {
+	c := 0
+	return func() int {
+		c++
+		return c
+	}
+}
+
+func main() {
+	fmt.Println(somar(), somar(1, 2), somar(1, 2, 3, 4))
+	lista := []int{10, 20, 30}
+	fmt.Println(somar(lista...))
+
+	quadrado := func(n int) int { return n * n }
+	fmt.Println(aplicar(5, quadrado))
+
+	proximo := contador()
+	fmt.Println(proximo(), proximo(), proximo())
+}</pre>
+<pre class="term" data-cwd="~/projetos/funcoes2">$ go run main.go
+0 3 10
+60
+25
+1 2 3</pre>
+<hr>
+<h2>3. Go passa cópias</h2>
+<p>Os argumentos chegam como <strong>cópias</strong>. Zerar <code>n</code> dentro de <code>zerar</code> não muda o <code>x</code> de fora. Já o slice é uma janela para um array: a cópia da janela aponta para o mesmo array, então a mudança aparece fora. Para mudar um <code>int</code> de fora, use um ponteiro (aula <a href="ponteiros.html">Ponteiros</a>).</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func zerar(n int) {
+	n = 0
+}
+
+func zerarPrimeiro(s []int) {
+	s[0] = 0
+}
+
+func main() {
+	x := 10
+	zerar(x)
+	fmt.Println("x:", x)
+
+	lista := []int{1, 2, 3}
+	zerarPrimeiro(lista)
+	fmt.Println("lista:", lista)
+}</pre>
+<pre class="term" data-cwd="~/projetos/copia">$ go run main.go
+x: 10
+lista: [0 2 3]</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Esqueceu o <code>return</code></strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func dobro(x int) int {
+	x * 2
+}
+
+func main() {
+	fmt.Println(dobro(2))
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-func">$ go run main.go
+# command-line-arguments
+./main.go:6:2: x * 2 (value of type int) is not used
+./main.go:7:1: missing return</pre>
+<p>Duas mensagens: a conta <code>x * 2</code> foi calculada e jogada fora, e a função, que promete devolver um <code>int</code>, termina sem <code>return</code>.</p></div>
+<div class="cenario"><strong>Argumentos a menos ou do tipo errado</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func area(largura, altura float64) float64 {
+	return largura * altura
+}
+
+func main() {
+	fmt.Println(area(3))
+	fmt.Println(area(3, "2"))
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-func2">$ go run main.go
+# command-line-arguments
+./main.go:10:19: not enough arguments in call to area
+	have (number)
+	want (float64, float64)
+./main.go:11:22: cannot use "2" (untyped string constant) as float64 value in argument to area</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>func f(a int, b string) bool { … }</code></td><td>Função com parâmetros e retorno.</td></tr>
+<tr><td><code>func f(a, b int)</code></td><td>Parâmetros que dividem o tipo.</td></tr>
+<tr><td><code>func f(nums ...int)</code></td><td>Variádica; chame com <code>f(1, 2)</code> ou <code>f(s...)</code>.</td></tr>
+<tr><td><code>g := func(x int) int { … }</code></td><td>Função anônima numa variável.</td></tr>
+<tr><td><code>func f(g func(int) int)</code></td><td>Função como parâmetro.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Declare</h3><p>Complete:</p><div class="ex-code"><input data-answer="func" aria-label="resposta"> triplo(x int) int {</div></div>
+
+<div class="exercise"><h3>2. Devolva</h3><p>Complete:</p><div class="ex-code">    <input data-answer="return" aria-label="resposta"> x * 3</div></div>
+
+<div class="exercise"><h3>3. Variádica</h3><p>Complete para aceitar quantos números quiser:</p><div class="ex-code">func media(nums <input data-answer="..." aria-label="resposta">float64) float64 {</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Em <code>func dobro(x int) int</code>, o que é o último <code>int</code>?</p>
+<label><input type="radio" name="q4"> O tipo do parâmetro</label>
+<label><input type="radio" name="q4"> O tipo do valor devolvido</label>
+<label><input type="radio" name="q4"> O nome da função</label>
+<label><input type="radio" name="q4"> Um erro de digitação</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. Depois de <code>zerar(x)</code>, que faz <code>n = 0</code> no parâmetro, quanto vale <code>x</code> lá fora?</p>
+<label><input type="radio" name="q5"> 0</label>
+<label><input type="radio" name="q5"> O valor de antes: a função recebeu uma cópia</label>
+<label><input type="radio" name="q5"> nil</label>
+<label><input type="radio" name="q5"> Não compila</label></div>
+
+<div class="trycmd" data-goal="src:func maior\(;;src:maior\(4, 9\);;outre:^9$;;semerro">
+<p class="try-task"><strong>Missão:</strong> escreva a função <code>maior(a, b int) int</code>, que devolve o maior dos dois. A saída deve ser <code>9</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+// escreva a função maior aqui
+
+func main() {
+	fmt.Println(9)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func maior(a, b int) int {
+	if a &gt; b {
+		return a
+	}
+	return b
+}
+
+func main() {
+	fmt.Println(maior(4, 9))
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+9
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:func media\(nums \.\.\.float64\);;outre:^média: 7$;;semerro">
+<p class="try-task"><strong>Missão:</strong> escreva a função variádica <code>media(nums ...float64) float64</code>. Com 6, 7 e 8, a saída deve ser <code>média: 7</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("média:")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func media(nums ...float64) float64 {
+	soma := 0.0
+	for _, n := range nums {
+		soma += n
+	}
+	return soma / float64(len(nums))
+}
+
+func main() {
+	fmt.Println("média:", media(6, 7, 8))
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+média: 7
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>func nome(param tipo) retorno { … }</code>; <code>return</code> devolve.</li>
+<li>Variádicas com <code>...</code>; funções são valores e podem formar closures.</li>
+<li>Argumentos são cópias; slices e maps compartilham os dados.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

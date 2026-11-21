@@ -37,10 +37,10 @@ var NIVEIS = [
       ["strings-e-runes.html", "Strings e Runes"]
     ]},
     { grupo: "Funções e Tipos", itens: [
-      ["funcoes.html", "Funções", { pronta: false }],
-      ["multiplos-retornos.html", "Múltiplos Retornos", { pronta: false }],
-      ["erros-error.html", "Erros (o tipo error)", { pronta: false }],
-      ["structs-e-metodos.html", "Structs e Métodos", { pronta: false }]
+      ["funcoes.html", "Funções"],
+      ["multiplos-retornos.html", "Múltiplos Retornos"],
+      ["erros-error.html", "Erros (o tipo error)"],
+      ["structs-e-metodos.html", "Structs e Métodos"]
     ]}
   ]},
   { id: "n2", nome: "Nível 2 · Intermediário", curto: "Intermediário", desc: "Ponteiros, interfaces, pacotes, testes e arquivos", grupos: [

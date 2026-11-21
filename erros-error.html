@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Erros em Go — o tipo error, errors.New, fmt.Errorf e if err != nil | Guia Go</title>
+<meta name="description" content="Como Go trata erros: o tipo error, criar erros com errors.New e fmt.Errorf, embrulhar com %w, o padrão if err != nil e os.Exit.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Erros (o tipo <span class="hl">error</span>)</h1>
+
+<p class="intro">Go não tem exceções com <code>try</code>/<code>catch</code>. Um erro é um <strong>valor</strong> comum, do tipo <code>error</code>, devolvido junto com o resultado. Quem chama confere com <code>if err != nil</code> e decide o que fazer. Parece repetitivo no começo, mas deixa claro, em cada linha, onde algo pode falhar.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Devolver erros com <code>errors.New</code> e <code>fmt.Errorf</code>, e <code>nil</code> quando deu certo.</li><li>Conferir com <code>if err != nil</code> e reagir: avisar, pular, encerrar.</li><li>Embrulhar um erro com <code>%w</code>, acrescentando contexto, e encerrar com <code>os.Exit(1)</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Criando e devolvendo erros</h2>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+func sacar(saldo, valor float64) (float64, error) {
+	if valor &lt;= 0 {
+		return saldo, errors.New("valor precisa ser positivo")
+	}
+	if valor &gt; saldo {
+		return saldo, fmt.Errorf("saldo insuficiente: tem %.2f, pediu %.2f", saldo, valor)
+	}
+	return saldo - valor, nil
+}
+
+func main() {
+	saldo := 100.0
+	for _, v := range []float64{30, -5, 500} {
+		novo, err := sacar(saldo, v)
+		if err != nil {
+			fmt.Println("erro:", err)
+			continue
+		}
+		saldo = novo
+		fmt.Println("sacou", v, "- saldo:", saldo)
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/erros">$ go run main.go
+sacou 30 - saldo: 70
+erro: valor precisa ser positivo
+erro: saldo insuficiente: tem 70.00, pediu 500.00</pre>
+<dl class="anatomy"><dt>(float64, error)</dt><dd>o resultado e o erro.</dd><dt>errors.New("…")</dt><dd>cria um erro com uma mensagem fixa.</dd><dt>fmt.Errorf("… %.2f", …)</dt><dd>cria um erro com a mensagem formatada, como um <code>Sprintf</code>.</dd><dt>return …, nil</dt><dd><code>nil</code> no lugar do erro quer dizer “deu certo”.</dd></dl>
+<p>Mensagens de erro em Go costumam começar com letra minúscula e não terminar com ponto, porque muitas vezes são emendadas em outras.</p>
+<hr>
+<h2>2. Embrulhar com <code>%w</code> e encerrar</h2>
+<p>O <code>%w</code> do <code>fmt.Errorf</code> põe o erro original dentro de um novo, com mais contexto. A mensagem final conta a história inteira. Quando não dá para continuar, <code>os.Exit(1)</code> encerra o programa com código de erro, e o <code>go run</code> avisa com <code>exit status 1</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+)
+
+func lerIdade(texto string) (int, error) {
+	n, err := strconv.Atoi(texto)
+	if err != nil {
+		return 0, fmt.Errorf("idade inválida %q: %w", texto, err)
+	}
+	return n, nil
+}
+
+func main() {
+	idade, err := lerIdade("trinta")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	fmt.Println("idade:", idade)
+}</pre>
+<pre class="term" data-cwd="~/projetos/wrap">$ go run main.go
+idade inválida "trinta": strconv.Atoi: parsing "trinta": invalid syntax
+exit status 1</pre>
+<p>A aula <a href="errors-is-as.html">errors.Is e errors.As</a> mostra como abrir o embrulho para descobrir o erro original.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Fingir que o erro não existe</strong>
+<p>Se a função devolve um erro, você precisa recebê-lo (ou descartá-lo de propósito com <code>_</code>):</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	n := strconv.Atoi("42")
+	fmt.Println(n)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-ignora">$ go run main.go
+# command-line-arguments
+./main.go:9:7: assignment mismatch: 1 variable but strconv.Atoi returns 2 values</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>errors.New("msg")</code></td><td>Cria um erro simples.</td></tr>
+<tr><td><code>fmt.Errorf("x %d", v)</code></td><td>Cria um erro formatado.</td></tr>
+<tr><td><code>fmt.Errorf("contexto: %w", err)</code></td><td>Embrulha o erro original.</td></tr>
+<tr><td><code>if err != nil { return …, err }</code></td><td>Confere e repassa.</td></tr>
+<tr><td><code>os.Exit(1)</code></td><td>Encerra com código de erro.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Conferir</h3><p>Complete o teste de erro:</p><div class="ex-code">if err <input data-answer="!=" aria-label="resposta"> nil {</div></div>
+
+<div class="exercise"><h3>2. Criar</h3><p>Complete para criar um erro simples:</p><div class="ex-code">errors.<input data-answer="New" aria-label="resposta">("estoque vazio")</div></div>
+
+<div class="exercise"><h3>3. Embrulhar</h3><p>Complete o verbo que embrulha:</p><div class="ex-code">fmt.Errorf("lendo config: <input data-answer="%w" aria-label="resposta">", err)</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. O que uma função devolve no lugar do erro quando deu tudo certo?</p>
+<label><input type="radio" name="q4"> <code>0</code></label>
+<label><input type="radio" name="q4"> <code>nil</code></label>
+<label><input type="radio" name="q4"> <code>true</code></label>
+<label><input type="radio" name="q4"> <code>"ok"</code></label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. Go tem <code>try</code>/<code>catch</code>?</p>
+<label><input type="radio" name="q5"> Sim, igual ao Java</label>
+<label><input type="radio" name="q5"> Não: erros são valores devolvidos e conferidos com <code>if err != nil</code></label>
+<label><input type="radio" name="q5"> Só no Nível 3</label>
+<label><input type="radio" name="q5"> Só com <code>import "try"</code></label></div>
+
+<div class="trycmd" data-goal="src:errors\.New\(&quot;divisão por zero&quot;\);;out:erro: divisão por zero;;semerro">
+<p class="try-task"><strong>Missão:</strong> complete <code>dividir</code> para devolver o erro <code>divisão por zero</code> quando <code>b</code> for 0. A <code>main</code> já confere o erro; a saída deve ser <code>erro: divisão por zero</code>. Lembre de importar o pacote <code>errors</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func dividir(a, b float64) (float64, error) {
+	return a / b, nil
+}
+
+func main() {
+	r, err := dividir(10, 0)
+	if err != nil {
+		fmt.Println("erro:", err)
+		return
+	}
+	fmt.Println(r)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+func dividir(a, b float64) (float64, error) {
+	if b == 0 {
+		return 0, errors.New("divisão por zero")
+	}
+	return a / b, nil
+}
+
+func main() {
+	r, err := dividir(10, 0)
+	if err != nil {
+		fmt.Println("erro:", err)
+		return
+	}
+	fmt.Println(r)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+erro: divisão por zero
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Erro é um valor do tipo <code>error</code>; <code>nil</code> quer dizer “sem erro”.</li>
+<li>Crie com <code>errors.New</code> ou <code>fmt.Errorf</code>; embrulhe com <code>%w</code>.</li>
+<li>Confira sempre com <code>if err != nil</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

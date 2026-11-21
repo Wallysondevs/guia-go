@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Structs e métodos em Go — type struct, receptores e embutir | Guia Go</title>
+<meta name="description" content="Structs em Go: agrupar campos com type struct, criar valores, métodos com receptor de valor e de ponteiro, e embutir uma struct em outra.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Structs e <span class="hl">Métodos</span></h1>
+
+<p class="intro">Uma <strong>struct</strong> junta vários valores numa coisa só: uma pessoa tem nome e idade; uma conta tem dono e saldo. E um <strong>método</strong> é uma função ligada a um tipo, chamada com ponto: <code>conta.Depositar(25)</code>. É assim que Go organiza dados e comportamento, sem classes.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Declarar <code>type Nome struct { … }</code>, criar valores e acessar campos.</li><li>Escrever métodos com receptor de valor <code>(c Conta)</code> e de ponteiro <code>(c *Conta)</code>.</li><li>Embutir uma struct em outra para reaproveitar campos e métodos.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Structs</h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+type Pessoa struct {
+	Nome  string
+	Idade int
+}
+
+func main() {
+	ana := Pessoa{Nome: "Ana", Idade: 30}
+	rui := Pessoa{"Rui", 25}
+	var vazia Pessoa
+
+	fmt.Println(ana.Nome, ana.Idade)
+	rui.Idade++
+	fmt.Printf("%+v\n", rui)
+	fmt.Printf("%+v\n", vazia)
+
+	ponto := struct{ X, Y int }{1, 2}
+	fmt.Println(ponto)
+}</pre>
+<pre class="term" data-cwd="~/projetos/structs">$ go run main.go
+Ana 30
+{Nome:Rui Idade:26}
+{Nome: Idade:0}
+{1 2}</pre>
+<dl class="anatomy"><dt>type Pessoa</dt><dd>cria um tipo novo chamado <code>Pessoa</code>.</dd><dt>struct { … }</dt><dd>feito de campos.</dd><dt>Nome string</dt><dd>um campo: nome e tipo.</dd></dl>
+<p>Dá para criar com os nomes dos campos (<code>Pessoa{Nome: "Ana", Idade: 30}</code>, o jeito recomendado) ou na ordem (<code>Pessoa{"Rui", 25}</code>). Campo sem valor fica com o valor zero. E uma struct pode ser anônima, sem <code>type</code>, para usar uma vez só.</p>
+<hr>
+<h2>2. Métodos: receptor de valor e de ponteiro</h2>
+<p>O receptor fica entre <code>func</code> e o nome do método. Com <code>(c Conta)</code> o método recebe uma <strong>cópia</strong>: bom para ler. Com <code>(c *Conta)</code> recebe um <strong>ponteiro</strong> para o original: necessário para mudar. Veja o <code>DepositarErrado</code> “perder” os 1000:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+type Conta struct {
+	Dono  string
+	Saldo float64
+}
+
+func (c Conta) Resumo() string {
+	return fmt.Sprintf("%s: R$ %.2f", c.Dono, c.Saldo)
+}
+
+func (c *Conta) Depositar(valor float64) {
+	c.Saldo += valor
+}
+
+func (c Conta) DepositarErrado(valor float64) {
+	c.Saldo += valor // muda só a cópia
+}
+
+func main() {
+	c := Conta{Dono: "Ana", Saldo: 50}
+	c.Depositar(25)
+	fmt.Println(c.Resumo())
+	c.DepositarErrado(1000)
+	fmt.Println(c.Resumo())
+}</pre>
+<pre class="term" data-cwd="~/projetos/metodos">$ go run main.go
+Ana: R$ 75.00
+Ana: R$ 75.00</pre>
+<hr>
+<h2>3. Embutindo structs</h2>
+<p>Pôr um tipo dentro de outro sem nome de campo (<em>embedding</em>) faz os campos e métodos dele ficarem acessíveis direto: <code>c.Cidade</code> e <code>c.Local()</code>. É o jeito Go de reaproveitar, no lugar da herança:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+type Endereco struct {
+	Cidade string
+	UF     string
+}
+
+type Cliente struct {
+	Nome string
+	Endereco // embutido: os campos "sobem" para Cliente
+}
+
+func (e Endereco) Local() string {
+	return e.Cidade + "/" + e.UF
+}
+
+func main() {
+	c := Cliente{Nome: "Bia", Endereco: Endereco{"Recife", "PE"}}
+	fmt.Println(c.Nome, c.Cidade, c.Local())
+	fmt.Printf("%+v\n", c)
+}</pre>
+<pre class="term" data-cwd="~/projetos/embutir">$ go run main.go
+Bia Recife Recife/PE
+{Nome:Bia Endereco:{Cidade:Recife UF:PE}}</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Campo que não existe</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+type Pessoa struct {
+	Nome  string
+	Idade int
+}
+
+func main() {
+	p := Pessoa{Nome: "Ana", Email: "ana@exemplo.com"}
+	fmt.Println(p.Telefone)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-struct">$ go run main.go
+# command-line-arguments
+./main.go:11:27: unknown field Email in struct literal of type Pessoa
+./main.go:12:16: p.Telefone undefined (type Pessoa has no field or method Telefone)</pre></div>
+<div class="cenario"><strong>Valores a menos na forma sem nomes</strong>
+<p>Sem os nomes dos campos, você precisa dar <em>todos</em> os valores, na ordem. Mais um motivo para preferir <code>Pessoa{Nome: "Ana"}</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+type Pessoa struct {
+	Nome  string
+	Idade int
+}
+
+func main() {
+	p := Pessoa{"Ana"}
+	fmt.Println(p)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-struct2">$ go run main.go
+# command-line-arguments
+./main.go:11:19: too few values in struct literal of type Pessoa</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>type P struct { Nome string }</code></td><td>Declara a struct.</td></tr>
+<tr><td><code>p := P{Nome: "Ana"}</code></td><td>Cria com nomes de campo.</td></tr>
+<tr><td><code>p.Nome</code></td><td>Lê ou muda um campo.</td></tr>
+<tr><td><code>func (p P) Metodo()</code></td><td>Método com receptor de valor (cópia).</td></tr>
+<tr><td><code>func (p *P) Metodo()</code></td><td>Receptor de ponteiro (muda o original).</td></tr>
+<tr><td><code>type C struct { Endereco }</code></td><td>Embute outro tipo.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Declare</h3><p>Complete:</p><div class="ex-code">type Produto <input data-answer="struct" aria-label="resposta"> {</div></div>
+
+<div class="exercise"><h3>2. Receptor que muda</h3><p>Complete para o método mudar o original:</p><div class="ex-code">func (c <input data-answer="*Conta" aria-label="resposta">) Depositar(v float64) {</div></div>
+
+<div class="exercise"><h3>3. Campo</h3><p>Complete para ler o nome:</p><div class="ex-code">fmt.Println(p<input data-answer=".Nome" aria-label="resposta">)</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Por que <code>DepositarErrado</code>, com receptor <code>(c Conta)</code>, não mudou o saldo?</p>
+<label><input type="radio" name="q4"> Bug do Go</label>
+<label><input type="radio" name="q4"> Porque recebeu uma cópia da conta; para mudar o original, o receptor precisa ser <code>*Conta</code></label>
+<label><input type="radio" name="q4"> Porque faltou <code>return</code></label>
+<label><input type="radio" name="q4"> Porque <code>Saldo</code> é minúsculo</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. Go tem classes?</p>
+<label><input type="radio" name="q5"> Sim</label>
+<label><input type="radio" name="q5"> Não: usa structs, métodos e embutir tipos</label>
+<label><input type="radio" name="q5"> Só no Nível 2</label>
+<label><input type="radio" name="q5"> Só com generics</label></div>
+
+<div class="trycmd" data-goal="src:type Retangulo struct;;src:func \(\w+ \*?Retangulo\) Area\(\) float64;;out:área: 12;;semerro">
+<p class="try-task"><strong>Missão:</strong> crie <code>type Retangulo struct { Largura, Altura float64 }</code> e o método <code>Area() float64</code>. Para 3 por 4, a saída deve ser <code>área: 12</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+// declare Retangulo e o método Area aqui
+
+func main() {
+	fmt.Println("área:")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+type Retangulo struct {
+	Largura, Altura float64
+}
+
+func (r Retangulo) Area() float64 {
+	return r.Largura * r.Altura
+}
+
+func main() {
+	r := Retangulo{Largura: 3, Altura: 4}
+	fmt.Println("área:", r.Area())
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+área: 12
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:func \(p \*Pessoa\) Aniversario;;out:Ana tem 31 anos;;semerro">
+<p class="try-task"><strong>Missão:</strong> o método <code>Aniversario</code> devia somar 1 à idade, mas não funciona. Troque o receptor para ponteiro, para a saída ser <code>Ana tem 31 anos</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+type Pessoa struct {
+	Nome  string
+	Idade int
+}
+
+func (p Pessoa) Aniversario() {
+	p.Idade++
+}
+
+func main() {
+	ana := Pessoa{Nome: "Ana", Idade: 30}
+	ana.Aniversario()
+	fmt.Println(ana.Nome, "tem", ana.Idade, "anos")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+type Pessoa struct {
+	Nome  string
+	Idade int
+}
+
+func (p *Pessoa) Aniversario() {
+	p.Idade++
+}
+
+func main() {
+	ana := Pessoa{Nome: "Ana", Idade: 30}
+	ana.Aniversario()
+	fmt.Println(ana.Nome, "tem", ana.Idade, "anos")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Ana tem 31 anos
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>type X struct { … }</code> agrupa campos; crie com <code>X{Campo: v}</code>.</li>
+<li>Métodos têm receptor: de valor (cópia) ou de ponteiro (muda o original).</li>
+<li>Embutir um tipo reaproveita seus campos e métodos.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
