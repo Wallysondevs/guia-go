@@ -25,16 +25,16 @@ var NIVEIS = [
       ["fmt-printf.html", "Formatando com fmt.Printf"]
     ]},
     { grupo: "Controle de Fluxo", itens: [
-      ["if-else.html", "if e else", { pronta: false }],
-      ["for.html", "for", { pronta: false }],
-      ["switch.html", "switch", { pronta: false }],
-      ["defer.html", "defer", { pronta: false }]
+      ["if-else.html", "if e else"],
+      ["for.html", "for"],
+      ["switch.html", "switch"],
+      ["defer.html", "defer"]
     ]},
     { grupo: "Coleções", itens: [
-      ["arrays.html", "Arrays", { pronta: false }],
-      ["slices.html", "Slices", { pronta: false }],
-      ["maps.html", "Maps", { pronta: false }],
-      ["strings-e-runes.html", "Strings e Runes", { pronta: false }]
+      ["arrays.html", "Arrays"],
+      ["slices.html", "Slices"],
+      ["maps.html", "Maps"],
+      ["strings-e-runes.html", "Strings e Runes"]
     ]},
     { grupo: "Funções e Tipos", itens: [
       ["funcoes.html", "Funções", { pronta: false }],
@@ -68,11 +68,11 @@ var NIVEIS = [
   ]},
   { id: "n3", nome: "Nível 3 · Avançado", curto: "Avançado", desc: "Concorrência, rede e ferramentas", grupos: [
     { grupo: "Concorrência", itens: [
-      ["goroutines.html", "Goroutines", { pronta: false }],
-      ["channels.html", "Channels", { pronta: false }],
-      ["select.html", "select", { pronta: false }],
-      ["sync.html", "sync.WaitGroup e sync.Mutex", { pronta: false }],
-      ["context.html", "context", { pronta: false }]
+      ["goroutines.html", "Goroutines"],
+      ["channels.html", "Channels"],
+      ["select.html", "select"],
+      ["sync.html", "sync.WaitGroup e sync.Mutex"],
+      ["context.html", "context"]
     ]},
     { grupo: "Rede e Ferramentas", itens: [
       ["http-servidor.html", "Servidor HTTP (net/http)", { pronta: false }],

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strings e runes em Go — bytes, UTF-8, range e o pacote strings | Guia Go</title>
+<meta name="description" content="Strings em Go: bytes em UTF-8, len vs. número de caracteres, rune, range, []rune, o pacote strings, strings.Builder e strings cruas com crase.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Strings e <span class="hl">Runes</span></h1>
+
+<p class="intro">Uma <code>string</code> em Go é uma sequência de <strong>bytes</strong> em UTF-8, que não muda depois de criada. Letras sem acento ocupam um byte; <code>á</code>, <code>ç</code> e <code>ã</code> ocupam dois. Por isso existe a <code>rune</code>: um caractere Unicode inteiro. Saber isso evita o bug clássico de cortar um acento ao meio.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>A diferença entre <code>len(s)</code> (bytes) e o número de caracteres.</li><li><code>rune</code>, o <code>range</code> por caracteres e a conversão <code>[]rune(s)</code>.</li><li>As funções do pacote <code>strings</code>, o <code>strings.Builder</code> e as strings cruas com crase.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Bytes, runes e <code>range</code></h2>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"unicode/utf8"
+)
+
+func main() {
+	s := "Olá, Go"
+	fmt.Println(len(s), utf8.RuneCountInString(s))
+	fmt.Println(s[0], string(s[0]))
+	fmt.Println(s[:3])
+
+	for i, r := range "ação" {
+		fmt.Printf("%d:%c(%d) ", i, r, r)
+	}
+	fmt.Println()
+
+	runas := []rune("ação")
+	fmt.Println(len(runas), string(runas[1]))
+}</pre>
+<pre class="term" data-cwd="~/projetos/strings">$ go run main.go
+8 7
+79 O
+Ol�
+0:a(97) 1:ç(231) 3:ã(227) 5:o(111) 
+4 ç</pre>
+<p><code>"Olá, Go"</code> tem 7 caracteres mas 8 bytes, porque o <code>á</code> usa dois. <code>s[0]</code> é um <strong>byte</strong> (79, o <code>O</code>). E <code>s[:3]</code> corta <strong>3 bytes</strong>: o <code>O</code>, o <code>l</code> e só a primeira metade do <code>á</code>, que o terminal mostra como <code>�</code> (veja “Quando dá errado”). O <code>range</code> anda de caractere em caractere: em <code>"ação"</code>, os índices pulam de 1 para 3 porque o <code>ç</code> ocupa os bytes 1 e 2. Para trabalhar com caracteres por posição, converta para <code>[]rune</code>.</p>
+<hr>
+<h2>2. O pacote <code>strings</code></h2>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	frase := "  Go é simples e Go é rápido  "
+	limpa := strings.TrimSpace(frase)
+	fmt.Printf("%q\n", limpa)
+	fmt.Println(strings.ToUpper(limpa))
+	fmt.Println(strings.Contains(limpa, "rápido"), strings.Count(limpa, "Go"))
+	fmt.Println(strings.Replace(limpa, "Go", "Golang", 1))
+	fmt.Println(strings.Split("a,b,c", ","))
+	fmt.Println(strings.Join([]string{"2026", "11", "21"}, "-"))
+	fmt.Println(strings.HasPrefix(limpa, "Go"), strings.Index(limpa, "simples"))
+	fmt.Println(strings.Repeat("=", 10))
+}</pre>
+<pre class="term" data-cwd="~/projetos/strings2">$ go run main.go
+"Go é simples e Go é rápido"
+GO É SIMPLES E GO É RÁPIDO
+true 2
+Golang é simples e Go é rápido
+[a b c]
+2026-11-21
+true 6
+==========</pre>
+<hr>
+<h2>3. Montando texto e strings cruas</h2>
+<p>Strings não mudam: para “trocar” uma letra, você monta outra string. Para juntar muitos pedaços, o <code>strings.Builder</code> é eficiente. E texto entre <strong>crases</strong> é “cru”: a barra invertida não é escape, bom para caminhos do Windows e expressões regulares:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	var b strings.Builder
+	for i := 3; i &gt; 0; i-- {
+		fmt.Fprintf(&amp;b, "%d... ", i)
+	}
+	b.WriteString("já!")
+	fmt.Println(b.String())
+
+	s := "texto"
+	// s[0] = 'T' não compila: strings não mudam
+	s = "T" + s[1:]
+	fmt.Println(s)
+	fmt.Println("caminho: C:\\pasta", `cru: C:\pasta\n sem escape`)
+}</pre>
+<pre class="term" data-cwd="~/projetos/builder">$ go run main.go
+3... 2... 1... já!
+Texto
+caminho: C:\pasta cru: C:\pasta\n sem escape</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Tentar mudar uma letra</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	s := "texto"
+	s[0] = 'T'
+	fmt.Println(s)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-string">$ go run main.go
+# command-line-arguments
+./main.go:7:2: cannot assign to s[0] (neither addressable nor a map index expression)</pre></div>
+<div class="cenario"><strong>Cortar no meio de um acento</strong>
+<p>Isto compila e roda, mas <code>s[:2]</code> pega 2 <em>bytes</em>: o <code>a</code> e só a primeira metade do <code>ç</code>. O terminal mostra um caractere quebrado. Com <code>[]rune</code>, o corte é por caracteres:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	s := "ação"
+	fmt.Println(s[:2])
+	fmt.Println(string([]rune(s)[:2]))
+}</pre>
+<pre class="term" data-cwd="~/projetos/corta-acento">$ go run main.go
+a�
+aç</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>len(s)</code></td><td>Tamanho em bytes.</td></tr>
+<tr><td><code>utf8.RuneCountInString(s)</code></td><td>Número de caracteres.</td></tr>
+<tr><td><code>for i, r := range s</code></td><td>Percorre caracteres (<code>r</code> é rune).</td></tr>
+<tr><td><code>[]rune(s)</code>, <code>string(runas)</code></td><td>Texto ↔ lista de caracteres.</td></tr>
+<tr><td><code>strings.ToUpper</code>, <code>Contains</code>, <code>Split</code>, <code>Join</code>, <code>TrimSpace</code></td><td>Funções do pacote <code>strings</code>.</td></tr>
+<tr><td><code>`texto cru`</code></td><td>Sem escapes (<code>\n</code> fica literal).</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Bytes</h3><p>Quantos bytes tem <code>"pão"</code>?</p><div class="ex-code"><input data-answer="4" aria-label="resposta"></div></div>
+
+<div class="exercise"><h3>2. Caracteres</h3><p>Complete para virar lista de caracteres:</p><div class="ex-code">runas := []<input data-answer="rune" aria-label="resposta">(s)</div></div>
+
+<div class="exercise"><h3>3. Maiúsculas</h3><p>Complete:</p><div class="ex-code">strings.<input data-answer="ToUpper" aria-label="resposta">("go")</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Por que <code>len("ação")</code> dá 6?</p>
+<label><input type="radio" name="q4"> Bug</label>
+<label><input type="radio" name="q4"> Porque conta bytes, e <code>ç</code> e <code>ã</code> usam 2 bytes cada em UTF-8</label>
+<label><input type="radio" name="q4"> Porque conta o <code>\n</code></label>
+<label><input type="radio" name="q4"> Porque conta as aspas</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. O que é uma <code>rune</code>?</p>
+<label><input type="radio" name="q5"> Um byte</label>
+<label><input type="radio" name="q5"> Um caractere Unicode (apelido de <code>int32</code>)</label>
+<label><input type="radio" name="q5"> Uma string de uma letra</label>
+<label><input type="radio" name="q5"> Um erro de texto</label></div>
+
+<div class="trycmd" data-goal="src:RuneCountInString|\[\]rune;;out:bytes: 9 caracteres: 7;;semerro">
+<p class="try-task"><strong>Missão:</strong> escreva quantos <strong>bytes</strong> e quantos <strong>caracteres</strong> tem a palavra <code>coração</code>. A saída deve ser <code>bytes: 9 caracteres: 7</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	palavra := "coração"
+	fmt.Println("bytes:", len(palavra))
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"unicode/utf8"
+)
+
+func main() {
+	palavra := "coração"
+	fmt.Println("bytes:", len(palavra), "caracteres:", utf8.RuneCountInString(palavra))
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+bytes: 9 caracteres: 7
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:strings\.Split\(;;src:strings\.Join\(;;out:Ana e Rui e Bia;;semerro">
+<p class="try-task"><strong>Missão:</strong> use <code>strings.Split</code> para separar <code>"Ana;Rui;Bia"</code> pelo <code>;</code> e <code>strings.Join</code> para juntar com <code>" e "</code>. A saída deve ser <code>Ana e Rui e Bia</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	nomes := "Ana;Rui;Bia"
+	fmt.Println(nomes)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	nomes := "Ana;Rui;Bia"
+	partes := strings.Split(nomes, ";")
+	fmt.Println(strings.Join(partes, " e "))
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Ana e Rui e Bia
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>String é uma sequência de bytes UTF-8 que não muda.</li>
+<li><code>len</code> conta bytes; <code>range</code> e <code>[]rune</code> trabalham com caracteres.</li>
+<li>O pacote <code>strings</code> tem quase tudo; crases fazem strings cruas.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>for em Go — o único laço: clássico, como while, infinito e range | Guia Go</title>
+<meta name="description" content="O laço for em Go nas suas quatro formas: com contador, como while, infinito com break e com range, além de break e continue.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">for</span></h1>
+
+<p class="intro">Go tem um laço só, o <code>for</code>, mas ele faz tudo: contar de 1 a 10, repetir enquanto uma condição valer (o <code>while</code> de outras linguagens), rodar para sempre até um <code>break</code> e percorrer listas com <code>range</code>.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>O <code>for</code> clássico: início; condição; passo.</li><li>O <code>for</code> como <code>while</code>, o infinito e o <code>range</code> (inclusive <code>range 3</code>).</li><li><code>break</code> e <code>continue</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Contador, condição e <code>range</code> de um número</h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	for i := 1; i &lt;= 3; i++ {
+		fmt.Println("volta", i)
+	}
+
+	contagem := 3
+	for contagem &gt; 0 {
+		fmt.Println("faltam", contagem)
+		contagem--
+	}
+
+	for i := range 3 {
+		fmt.Print(i, " ")
+	}
+	fmt.Println()
+}</pre>
+<pre class="term" data-cwd="~/projetos/for">$ go run main.go
+volta 1
+volta 2
+volta 3
+faltam 3
+faltam 2
+faltam 1
+0 1 2 </pre>
+<dl class="anatomy"><dt>i := 1</dt><dd>início: roda uma vez.</dd><dt>i &lt;= 3</dt><dd>condição: conferida antes de cada volta.</dd><dt>i++</dt><dd>passo: roda no fim de cada volta.</dd></dl>
+<p>Com só a condição, o <code>for</code> vira um “enquanto”. E <code>for i := range 3</code> conta de 0 a 2.</p>
+<hr>
+<h2>2. <code>range</code> em listas e textos</h2>
+<p>O <code>range</code> entrega a posição e o valor de cada item. Se você não precisa de um deles, troque por <code>_</code>. Num texto, ele anda de <strong>caractere em caractere</strong>, e a posição é em bytes: o <code>é</code> ocupa dois bytes.</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	frutas := []string{"maçã", "banana", "uva"}
+	for i, f := range frutas {
+		fmt.Println(i, f)
+	}
+	for _, f := range frutas {
+		fmt.Print(f, ";")
+	}
+	fmt.Println()
+
+	for i, letra := range "pé" {
+		fmt.Println(i, string(letra))
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/range">$ go run main.go
+0 maçã
+1 banana
+2 uva
+maçã;banana;uva;
+0 p
+1 é</pre>
+<hr>
+<h2>3. <code>break</code>, <code>continue</code> e o laço infinito</h2>
+<p><code>continue</code> pula para a próxima volta; <code>break</code> sai do laço. Um <code>for</code> sem nada é infinito e só termina com <code>break</code> (ou <code>return</code>):</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	for i := 1; i &lt;= 10; i++ {
+		if i%2 == 0 {
+			continue // pula os pares
+		}
+		if i &gt; 7 {
+			break // para tudo
+		}
+		fmt.Print(i, " ")
+	}
+	fmt.Println()
+
+	n := 0
+	for {
+		n++
+		if n*n &gt; 50 {
+			break
+		}
+	}
+	fmt.Println("primeiro n com n² &gt; 50:", n)
+}</pre>
+<pre class="term" data-cwd="~/projetos/break">$ go run main.go
+1 3 5 7 
+primeiro n com n² &gt; 50: 8</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Não existe <code>while</code></strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	i := 0
+	while i &lt; 3 {
+		i++
+	}
+	fmt.Println(i)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-while">$ go run main.go
+# command-line-arguments
+./main.go:7:8: syntax error: unexpected name i at end of statement
+./main.go:10:2: syntax error: non-declaration statement outside function body</pre>
+<p>Em Go é <code>for i &lt; 3 { … }</code>.</p></div>
+<div class="cenario"><strong>Parênteses em volta do <code>for</code></strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	for (i := 0; i &lt; 3; i++) {
+		fmt.Println(i)
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-for">$ go run main.go
+# command-line-arguments
+./main.go:6:9: syntax error: unexpected :=, expected )</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>for i := 0; i &lt; n; i++ { }</code></td><td>Laço com contador.</td></tr>
+<tr><td><code>for cond { }</code></td><td>Enquanto a condição valer.</td></tr>
+<tr><td><code>for { }</code></td><td>Infinito (saia com <code>break</code>).</td></tr>
+<tr><td><code>for i, v := range lista { }</code></td><td>Percorre posição e valor.</td></tr>
+<tr><td><code>for i := range 10 { }</code></td><td>De 0 a 9.</td></tr>
+<tr><td><code>break</code> / <code>continue</code></td><td>Sai do laço / pula para a próxima volta.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Contar</h3><p>Complete para contar de 0 a 4:</p><div class="ex-code">for i := 0; i <input data-answer="&lt;" aria-label="resposta"> 5; i++ {</div></div>
+
+<div class="exercise"><h3>2. Percorrer</h3><p>Complete para percorrer a lista:</p><div class="ex-code">for i, v := <input data-answer="range" aria-label="resposta"> lista {</div></div>
+
+<div class="exercise"><h3>3. Sair</h3><p>Que palavra sai do laço na hora?</p><div class="ex-code"><input data-answer="break" aria-label="resposta"></div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Como se escreve um “while” em Go?</p>
+<label><input type="radio" name="q4"> <code>while x &lt; 3 { }</code></label>
+<label><input type="radio" name="q4"> <code>for x &lt; 3 { }</code></label>
+<label><input type="radio" name="q4"> <code>loop x &lt; 3 { }</code></label>
+<label><input type="radio" name="q4"> <code>do { } while x &lt; 3</code></label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. O que <code>for i := range 3</code> entrega em <code>i</code>?</p>
+<label><input type="radio" name="q5"> 1, 2, 3</label>
+<label><input type="radio" name="q5"> 0, 1, 2</label>
+<label><input type="radio" name="q5"> 3</label>
+<label><input type="radio" name="q5"> 0, 1, 2, 3</label></div>
+
+<div class="trycmd" data-goal="src:\bfor\b;;outre:^7 x 1 = 7$;;outre:^7 x 10 = 70$;;semerro">
+<p class="try-task"><strong>Missão:</strong> use um <code>for</code> com contador para escrever a tabuada do 7, de <code>7 x 1 = 7</code> até <code>7 x 10 = 70</code>, uma por linha.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	// escreva o laço aqui
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	for i := 1; i &lt;= 10; i++ {
+		fmt.Printf("7 x %d = %d\n", i, 7*i)
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+7 x 1 = 7
+7 x 2 = 14
+7 x 3 = 21
+7 x 4 = 28
+7 x 5 = 35
+7 x 6 = 42
+7 x 7 = 49
+7 x 8 = 56
+7 x 9 = 63
+7 x 10 = 70
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:range valores;;out:soma: 100;;semerro">
+<p class="try-task"><strong>Missão:</strong> percorra a lista com <code>range</code> e some os valores. A saída deve ser <code>soma: 100</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	valores := []int{10, 20, 30, 40}
+	soma := 0
+	fmt.Println("soma:", soma)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	valores := []int{10, 20, 30, 40}
+	soma := 0
+	for _, v := range valores {
+		soma += v
+	}
+	fmt.Println("soma:", soma)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+soma: 100
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Go tem só o <code>for</code>: clássico, como while, infinito e com <code>range</code>.</li>
+<li><code>range</code> dá posição e valor; num texto, anda por caracteres.</li>
+<li><code>break</code> sai; <code>continue</code> pula a volta.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

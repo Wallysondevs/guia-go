@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maps em Go — chave e valor, delete, o vírgula ok e ordem | Guia Go</title>
+<meta name="description" content="Maps em Go: criar com map[chave]valor, ler, gravar, delete, o teste vírgula ok, percorrer com range em ordem e contar palavras.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Maps</span></h1>
+
+<p class="intro">Um map é um <strong>dicionário</strong>: você guarda um valor sob uma chave e depois busca pela chave. Nome → idade, produto → preço, palavra → quantas vezes apareceu. Nesta aula você cria, lê, apaga, testa se a chave existe e descobre que a ordem do map não é garantida.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Criar com <code>map[string]int{…}</code> ou <code>make</code>, ler e gravar com <code>m[chave]</code>, apagar com <code>delete</code>.</li><li>Distinguir “não existe” de “vale zero” com <code>v, ok := m[chave]</code>.</li><li>Percorrer com <code>range</code> e ordenar as chaves para ter uma ordem fixa.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. O básico</h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	idades := map[string]int{
+		"Ana": 30,
+		"Rui": 25,
+	}
+	idades["Bia"] = 41
+	idades["Rui"] = 26
+	fmt.Println(idades["Ana"], idades["Rui"], len(idades))
+
+	delete(idades, "Bia")
+	fmt.Println(idades)
+
+	fmt.Println("Zé:", idades["Zé"])
+	if idade, ok := idades["Zé"]; ok {
+		fmt.Println("achei:", idade)
+	} else {
+		fmt.Println("Zé não está no map")
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/maps">$ go run main.go
+30 26 3
+map[Ana:30 Rui:26]
+Zé: 0
+Zé não está no map</pre>
+<p>Ler uma chave que não existe <strong>não dá erro</strong>: devolve o valor zero (<code>0</code> para <code>int</code>). Para saber se a chave existe de verdade, use a forma com dois valores: o segundo, <code>ok</code>, é <code>true</code> só se a chave estiver lá.</p>
+<hr>
+<h2>2. Percorrendo em ordem e contando</h2>
+<p>O <code>range</code> num map entrega as chaves numa ordem <strong>que muda</strong> de uma execução para outra, de propósito. Quando a ordem importa, junte as chaves num slice e ordene. E como chave nova começa em zero, <code>contagem[p]++</code> conta palavras numa linha só:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
+func main() {
+	estoque := map[string]int{"café": 3, "pão": 12, "leite": 5}
+
+	chaves := make([]string, 0, len(estoque))
+	for k := range estoque {
+		chaves = append(chaves, k)
+	}
+	sort.Strings(chaves)
+	for _, k := range chaves {
+		fmt.Printf("%-6s %2d\n", k, estoque[k])
+	}
+
+	contagem := map[string]int{}
+	for _, p := range strings.Fields("o gato e o rato e o pato") {
+		contagem[p]++
+	}
+	fmt.Println(contagem)
+}</pre>
+<pre class="term" data-cwd="~/projetos/maps2">$ go run main.go
+café    3
+leite   5
+pão    12
+map[e:2 gato:1 o:3 pato:1 rato:1]</pre>
+<p>O <code>fmt.Println</code> de um map escreve as chaves em ordem alfabética, por isso a última linha sai sempre igual.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Gravar num map <code>nil</code></strong>
+<p>Um map só declarado (<code>var m map[…]…</code>) pode ser lido, mas não recebe valores: precisa de <code>make</code> ou <code>{}</code>.</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var precos map[string]float64
+	fmt.Println(precos["café"])
+	precos["café"] = 4.5
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-map">$ go run main.go
+0
+panic: assignment to entry in nil map
+
+goroutine 1 [running]:
+main.main()
+	/home/ana/projetos/erro-map/main.go:8 +0x8f
+exit status 2</pre>
+<p>Corrija com <code>precos := map[string]float64{}</code> ou <code>make(map[string]float64)</code>.</p></div>
+<div class="cenario"><strong>Tipo que não pode ser chave</strong>
+<p>A chave precisa ser comparável com <code>==</code>. Slices não são:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	m := map[[]int]string{}
+	fmt.Println(m)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-map2">$ go run main.go
+# command-line-arguments
+./main.go:6:11: invalid map key type []int</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>m := map[string]int{}</code></td><td>Map vazio, pronto para usar.</td></tr>
+<tr><td><code>m[k] = v</code>, <code>m[k]</code></td><td>Grava, lê (chave ausente → valor zero).</td></tr>
+<tr><td><code>v, ok := m[k]</code></td><td><code>ok</code> diz se a chave existe.</td></tr>
+<tr><td><code>delete(m, k)</code></td><td>Apaga a chave.</td></tr>
+<tr><td><code>for k, v := range m</code></td><td>Percorre (ordem não garantida).</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Apagar</h3><p>Complete:</p><div class="ex-code">delete(idades, <input data-answer="&quot;Ana&quot;" aria-label="resposta">)</div></div>
+
+<div class="exercise"><h3>2. Existe?</h3><p>Complete para saber se a chave existe:</p><div class="ex-code">idade, <input data-answer="ok" aria-label="resposta"> := idades["Ana"]</div></div>
+
+<div class="exercise"><h3>3. Criar</h3><p>Complete o tipo de um map de nome para preço:</p><div class="ex-code">precos := <input data-answer="map" aria-label="resposta">[string]float64{}</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. O que <code>idades["Zé"]</code> devolve se a chave não existe (map de <code>int</code>)?</p>
+<label><input type="radio" name="q4"> Um erro</label>
+<label><input type="radio" name="q4"> 0, o valor zero</label>
+<label><input type="radio" name="q4"> nil</label>
+<label><input type="radio" name="q4"> Para o programa</label></div>
+
+<div class="mc" data-answer="3"><p class="mc-q">5. Em que ordem o <code>range</code> percorre um map?</p>
+<label><input type="radio" name="q5"> Alfabética</label>
+<label><input type="radio" name="q5"> Na ordem em que as chaves entraram</label>
+<label><input type="radio" name="q5"> Uma ordem não garantida, que pode mudar</label>
+<label><input type="radio" name="q5"> Do maior para o menor valor</label></div>
+
+<div class="trycmd" data-goal="src:capitais\[&quot;CE&quot;\] = &quot;Fortaleza&quot;;;outre:^Fortaleza$;;semerro">
+<p class="try-task"><strong>Missão:</strong> crie um map <code>capitais</code> com <code>"PE": "Recife"</code> e <code>"BA": "Salvador"</code>, acrescente <code>"CE": "Fortaleza"</code> e escreva <code>capitais["CE"]</code>. A saída deve ser <code>Fortaleza</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	capitais := map[string]string{}
+	fmt.Println(capitais["CE"])
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	capitais := map[string]string{"PE": "Recife", "BA": "Salvador"}
+	capitais["CE"] = "Fortaleza"
+	fmt.Println(capitais["CE"])
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Fortaleza
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:, ok := estoque\[&quot;uva&quot;\];;out:uva: em falta;;semerro">
+<p class="try-task"><strong>Missão:</strong> use <code>v, ok := m[chave]</code> para testar se <code>"uva"</code> está no estoque. Se não estiver, escreva <code>uva: em falta</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	estoque := map[string]int{"maçã": 4, "pera": 0}
+	fmt.Println("uva:", estoque["uva"])
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	estoque := map[string]int{"maçã": 4, "pera": 0}
+	if q, ok := estoque["uva"]; ok {
+		fmt.Println("uva:", q)
+	} else {
+		fmt.Println("uva: em falta")
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+uva: em falta
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>map[chave]valor</code>: grave com <code>m[k] = v</code>, leia com <code>m[k]</code>, apague com <code>delete</code>.</li>
+<li>Chave ausente devolve o valor zero; use <code>v, ok :=</code> para saber se existe.</li>
+<li>A ordem do <code>range</code> não é garantida: ordene as chaves quando importar.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

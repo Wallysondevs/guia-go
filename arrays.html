@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arrays em Go — tamanho fixo, índice, len e cópia | Guia Go</title>
+<meta name="description" content="Arrays em Go: tamanho fixo que faz parte do tipo, índice a partir de zero, len, [...], cópia por valor, comparação e arrays de duas dimensões.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Arrays</span></h1>
+
+<p class="intro">Um array é uma fileira de caixas do <strong>mesmo tipo</strong>, com um <strong>tamanho fixo</strong>. Em Go o tamanho faz parte do tipo: <code>[3]int</code> e <code>[4]int</code> são tipos diferentes. Na prática você vai usar mais os <a href="slices.html">slices</a>, mas eles são construídos em cima dos arrays, então vale entender primeiro.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Declarar <code>[N]tipo</code>, ler e escrever com índice (começando em 0) e usar <code>len</code>.</li><li>Deixar o Go contar o tamanho com <code>[...]</code>.</li><li>Ver que atribuir um array <strong>copia</strong> tudo, e que arrays podem ser comparados.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Criando e acessando</h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var notas [3]float64
+	notas[0] = 7.5
+	notas[2] = 9
+	fmt.Println(notas, len(notas))
+
+	dias := [7]string{"dom", "seg", "ter", "qua", "qui", "sex", "sáb"}
+	fmt.Println(dias[1], dias[len(dias)-1])
+
+	primos := [...]int{2, 3, 5, 7, 11}
+	fmt.Printf("%v tem tipo %T\n", primos, primos)
+}</pre>
+<pre class="term" data-cwd="~/projetos/arrays">$ go run main.go
+[7.5 0 9] 3
+seg sáb
+[2 3 5 7 11] tem tipo [5]int</pre>
+<dl class="anatomy"><dt>[3]</dt><dd>o tamanho: três posições, numeradas 0, 1 e 2.</dd><dt>float64</dt><dd>o tipo de cada posição.</dd><dt>notas[2] = 9</dt><dd>escreve na terceira posição.</dd></dl>
+<p>A posição que ninguém preencheu ficou com o valor zero (<code>0</code>). A última posição é sempre <code>len(x)-1</code>.</p>
+<hr>
+<h2>2. Arrays são copiados</h2>
+<p>Atribuir um array a outra variável copia todos os valores: mudar <code>b</code> não muda <code>a</code>. Arrays do mesmo tipo podem ser comparados com <code>==</code>. E dá para ter array de array:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	a := [3]int{1, 2, 3}
+	b := a // copia o array inteiro
+	b[0] = 100
+	fmt.Println("a:", a, "b:", b)
+	fmt.Println("iguais?", a == [3]int{1, 2, 3})
+
+	var grade [2][3]int
+	grade[1][2] = 5
+	fmt.Println(grade)
+}</pre>
+<pre class="term" data-cwd="~/projetos/arrays2">$ go run main.go
+a: [1 2 3] b: [100 2 3]
+iguais? true
+[[0 0 0] [0 0 5]]</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Índice fora do array (o compilador vê)</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	dias := [3]string{"seg", "ter", "qua"}
+	fmt.Println(dias[3])
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-array">$ go run main.go
+# command-line-arguments
+./main.go:7:19: invalid argument: index 3 out of bounds [0:3]</pre></div>
+<div class="cenario"><strong>Índice fora do array (só com o programa rodando)</strong>
+<p>Se o índice está numa variável, o erro só aparece na execução, como um <code>panic</code>, que para o programa:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	dias := [3]string{"seg", "ter", "qua"}
+	i := 3
+	fmt.Println(dias[i])
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-array2">$ go run main.go
+panic: runtime error: index out of range [3] with length 3
+
+goroutine 1 [running]:
+main.main()
+	/home/ana/projetos/erro-array2/main.go:8 +0x9
+exit status 2</pre>
+<p>O <code>exit status 2</code> no fim é o <code>go run</code> avisando que o programa terminou com erro.</p></div>
+<div class="cenario"><strong>Tamanhos diferentes são tipos diferentes</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	var a [3]int
+	var b [4]int
+	a = b
+	fmt.Println(a)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-array3">$ go run main.go
+# command-line-arguments
+./main.go:8:6: cannot use b (variable of type [4]int) as [3]int value in assignment</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>var a [3]int</code></td><td>Array de 3 inteiros, todos 0.</td></tr>
+<tr><td><code>a := [3]int{1, 2, 3}</code></td><td>Com valores.</td></tr>
+<tr><td><code>a := [...]int{1, 2, 3}</code></td><td>O Go conta o tamanho.</td></tr>
+<tr><td><code>a[i]</code>, <code>len(a)</code></td><td>Posição <code>i</code> (de 0 a len−1) e tamanho.</td></tr>
+<tr><td><code>b := a</code></td><td>Copia todos os valores.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Primeira posição</h3><p>Complete para ler o primeiro item:</p><div class="ex-code">dias<input data-answer="[0" aria-label="resposta">]</div></div>
+
+<div class="exercise"><h3>2. Tamanho</h3><p>Complete para saber quantos itens há:</p><div class="ex-code"><input data-answer="len" aria-label="resposta">(dias)</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. Qual o último índice de um <code>[5]int</code>?</p>
+<label><input type="radio" name="q3"> 5</label>
+<label><input type="radio" name="q3"> 4</label>
+<label><input type="radio" name="q3"> 6</label>
+<label><input type="radio" name="q3"> 0</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Depois de <code>b := a</code> (arrays) e <code>b[0] = 9</code>, quanto vale <code>a[0]</code>?</p>
+<label><input type="radio" name="q4"> 9</label>
+<label><input type="radio" name="q4"> O valor antigo: o array foi copiado</label>
+<label><input type="radio" name="q4"> 0</label>
+<label><input type="radio" name="q4"> Não compila</label></div>
+
+<div class="trycmd" data-goal="src:\[4\]int\{;;src:len\(numeros\);;outre:^3 12 4$;;semerro">
+<p class="try-task"><strong>Missão:</strong> crie um array <code>[4]int</code> com 3, 6, 9 e 12, e escreva o primeiro, o último e o tamanho. A saída deve ser <code>3 12 4</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	// crie o array numeros aqui
+	fmt.Println()
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	numeros := [4]int{3, 6, 9, 12}
+	fmt.Println(numeros[0], numeros[len(numeros)-1], len(numeros))
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+3 12 4
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>[N]tipo</code>: tamanho fixo, que faz parte do tipo.</li>
+<li>Índices de 0 a <code>len-1</code>; fora disso, erro de compilação ou panic.</li>
+<li>Atribuir array copia tudo; no dia a dia, use slices.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

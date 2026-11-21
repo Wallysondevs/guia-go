@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>if e else em Go — condições, &amp;&amp;, || e if com inicialização | Guia Go</title>
+<meta name="description" content="Como decidir em Go com if, else if e else, os operadores de comparação e lógicos, e o if com declaração curta (if x := …; cond).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">if</span> e <span class="hl">else</span></h1>
+
+<p class="intro">O <code>if</code> é uma bifurcação: o programa confere uma condição e segue por um caminho ou por outro. Em Go ele não usa parênteses em volta da condição, mas as chaves são obrigatórias. E tem um truque próprio: declarar uma variável na mesma linha do <code>if</code>.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li><code>if</code>, <code>else if</code> e <code>else</code>, com chaves obrigatórias.</li><li>Comparações (<code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;=</code>…) e lógica (<code>&amp;&amp;</code>, <code>||</code>, <code>!</code>).</li><li>O <code>if v, err := …; err == nil</code>, muito usado com erros.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. <code>if</code>, <code>else if</code>, <code>else</code></h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	idade := 17
+	if idade &gt;= 18 {
+		fmt.Println("pode tirar carteira")
+	} else if idade &gt;= 16 {
+		fmt.Println("pode votar, mas não dirigir")
+	} else {
+		fmt.Println("ainda não vota")
+	}
+
+	nota, faltas := 7.5, 3
+	if nota &gt;= 7 &amp;&amp; faltas &lt;= 5 {
+		fmt.Println("aprovada")
+	}
+	if !(nota &lt; 5) || faltas &gt; 10 {
+		fmt.Println("não precisa de recuperação")
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/if">$ go run main.go
+pode votar, mas não dirigir
+aprovada
+não precisa de recuperação</pre>
+<p>As condições são conferidas de cima para baixo, e só o primeiro bloco verdadeiro roda. Com <code>idade</code> 17, a primeira é falsa e a segunda verdadeira.</p>
+<div class="table-wrap"><table class="ref">
+<tr><th>Operador</th><th>Quer dizer</th></tr>
+<tr><td><code>==</code> / <code>!=</code></td><td>igual / diferente</td></tr>
+<tr><td><code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code></td><td>menor, menor ou igual, maior, maior ou igual</td></tr>
+<tr><td><code>&amp;&amp;</code></td><td>E: as duas condições verdadeiras</td></tr>
+<tr><td><code>||</code></td><td>OU: pelo menos uma verdadeira</td></tr>
+<tr><td><code>!</code></td><td>NÃO: inverte</td></tr>
+</table></div>
+<hr>
+<h2>2. <code>if</code> com inicialização</h2>
+<p>Antes da condição, separado por <code>;</code>, você pode declarar variáveis que só existem dentro do <code>if</code> e do <code>else</code>. É o jeito idiomático de testar um erro:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	if n, err := strconv.Atoi("42"); err == nil {
+		fmt.Println("número válido:", n)
+	} else {
+		fmt.Println("erro:", err)
+	}
+
+	if n, err := strconv.Atoi("4x2"); err == nil {
+		fmt.Println("número válido:", n)
+	} else {
+		fmt.Println("erro:", err)
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/if-init">$ go run main.go
+número válido: 42
+erro: strconv.Atoi: parsing "4x2": invalid syntax</pre>
+<dl class="anatomy"><dt>n, err := strconv.Atoi("42")</dt><dd>a inicialização: roda primeiro.</dd><dt>;</dt><dd>separa a inicialização da condição.</dd><dt>err == nil</dt><dd>a condição: “não houve erro”.</dd></dl>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>A condição precisa ser <code>bool</code></strong>
+<p>Em Go, número não vira verdadeiro ou falso sozinho, como em C ou Python:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	quantidade := 3
+	if quantidade {
+		fmt.Println("tem itens")
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-if">$ go run main.go
+# command-line-arguments
+./main.go:7:5: non-boolean condition in if statement</pre>
+<p>Escreva a comparação inteira: <code>if quantidade &gt; 0</code>.</p></div>
+<div class="cenario"><strong>Sem chaves</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	idade := 20
+	if idade &gt;= 18
+		fmt.Println("maior de idade")
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-if2">$ go run main.go
+# command-line-arguments
+./main.go:8:32: syntax error: unexpected newline, expected { after if clause</pre></div>
+<div class="cenario"><strong>Variável do <code>if</code> usada fora dele</strong>
+<p>O que é declarado na inicialização morre no fim do <code>if</code>/<code>else</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	if total := 10; total &gt; 5 {
+		fmt.Println("grande")
+	}
+	fmt.Println(total)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-if3">$ go run main.go
+# command-line-arguments
+./main.go:9:14: undefined: total</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>if cond { … }</code></td><td>Roda o bloco se a condição for verdadeira.</td></tr>
+<tr><td><code>} else if cond { … } else { … }</code></td><td>Outros caminhos, conferidos em ordem.</td></tr>
+<tr><td><code>a &amp;&amp; b</code>, <code>a || b</code>, <code>!a</code></td><td>E, OU, NÃO.</td></tr>
+<tr><td><code>if v, err := f(); err != nil { … }</code></td><td>Declara e testa na mesma linha.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. O caminho contrário</h3><p>Complete:</p><div class="ex-code">if nota &gt;= 7 {
+    fmt.Println("passou")
+} <input data-answer="else" aria-label="resposta"> {
+    fmt.Println("recuperação")
+}</div></div>
+
+<div class="exercise"><h3>2. As duas condições</h3><p>Complete para exigir as duas:</p><div class="ex-code">if idade &gt;= 18 <input data-answer="&amp;&amp;" aria-label="resposta"> temCarteira {</div></div>
+
+<div class="exercise"><h3>3. Diferente</h3><p>Complete com o operador “diferente de”:</p><div class="ex-code">if err <input data-answer="!=" aria-label="resposta"> nil {</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. O que acontece com <code>if quantidade { … }</code>, sendo <code>quantidade</code> um <code>int</code>?</p>
+<label><input type="radio" name="q4"> Roda se for diferente de zero</label>
+<label><input type="radio" name="q4"> Não compila: a condição precisa ser <code>bool</code></label>
+<label><input type="radio" name="q4"> Roda sempre</label>
+<label><input type="radio" name="q4"> Nunca roda</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. Numa cadeia de <code>if</code>/<code>else if</code>, quantos blocos podem rodar?</p>
+<label><input type="radio" name="q5"> Todos os verdadeiros</label>
+<label><input type="radio" name="q5"> Só o primeiro verdadeiro (ou o <code>else</code>)</label>
+<label><input type="radio" name="q5"> Sempre dois</label>
+<label><input type="radio" name="q5"> Nenhum</label></div>
+
+<div class="trycmd" data-goal="src:\bif temperatura;;src:else if;;outre:^agradável$;;semerro">
+<p class="try-task"><strong>Missão:</strong> complete o <code>if</code>/<code>else if</code>/<code>else</code> para classificar a temperatura: acima de 30 é <code>calor</code>, de 15 a 30 é <code>agradável</code>, abaixo de 15 é <code>frio</code>. Com 22, a saída deve ser <code>agradável</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	temperatura := 22
+	// escreva o if aqui
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	temperatura := 22
+	if temperatura &gt; 30 {
+		fmt.Println("calor")
+	} else if temperatura &gt;= 15 {
+		fmt.Println("agradável")
+	} else {
+		fmt.Println("frio")
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+agradável
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:if n, err := strconv\.Atoi\(entrada\);;out:texto inválido;;semerro">
+<p class="try-task"><strong>Missão:</strong> use o <code>if</code> com inicialização para converter <code>"abc"</code> com <code>strconv.Atoi</code>. Se der erro, escreva <code>texto inválido</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	entrada := "abc"
+	n, _ := strconv.Atoi(entrada)
+	fmt.Println(n)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	entrada := "abc"
+	if n, err := strconv.Atoi(entrada); err != nil {
+		fmt.Println("texto inválido")
+	} else {
+		fmt.Println(n)
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+texto inválido
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>if</code> sem parênteses, com chaves obrigatórias; a condição é sempre <code>bool</code>.</li>
+<li><code>&amp;&amp;</code>, <code>||</code> e <code>!</code> combinam condições.</li>
+<li><code>if v, err := f(); err != nil</code> declara e testa numa linha.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

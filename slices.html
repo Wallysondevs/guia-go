@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slices em Go — append, fatias [a:b], len, cap, make e copy | Guia Go</title>
+<meta name="description" content="Slices em Go: listas que crescem com append, fatias [a:b], len e cap, make, copy, o slice nil e o pacote slices (Sort, Contains, Index).">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">Slices</span></h1>
+
+<p class="intro">O slice é a lista do dia a dia em Go: tem tamanho variável e cresce com <code>append</code>. Por baixo, ele é uma <strong>janela</strong> sobre um array. Entender essa janela explica por que mudar um pedaço pode mudar o original.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Criar slices, crescer com <code>append</code> e fatiar com <code>[a:b]</code>.</li><li><code>len</code> (quantos itens) e <code>cap</code> (quanto cabe antes de realocar), e o <code>make</code>.</li><li>Fatias compartilham memória; <code>copy</code> faz uma cópia de verdade. E o pacote <code>slices</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. <code>append</code> e fatias</h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	frutas := []string{"maçã", "banana"}
+	frutas = append(frutas, "uva")
+	frutas = append(frutas, "kiwi", "pera")
+	fmt.Println(frutas, len(frutas))
+
+	numeros := []int{10, 20, 30, 40, 50}
+	fmt.Println(numeros[1:3])
+	fmt.Println(numeros[:2], numeros[3:])
+
+	var vazio []int
+	fmt.Println(vazio, len(vazio), vazio == nil)
+}</pre>
+<pre class="term" data-cwd="~/projetos/slices">$ go run main.go
+[maçã banana uva kiwi pera] 5
+[20 30]
+[10 20] [40 50]
+[] 0 true</pre>
+<dl class="anatomy"><dt>[]string</dt><dd>slice de strings: colchetes <strong>sem</strong> número.</dd><dt>append(frutas, "uva")</dt><dd>devolve um slice com o item a mais.</dd><dt>frutas = …</dt><dd>guarde o resultado: o <code>append</code> não muda a variável sozinho.</dd></dl>
+<p>A fatia <code>numeros[1:3]</code> pega da posição 1 <strong>até antes</strong> da 3. Sem o começo, começa do 0; sem o fim, vai até o final. Um slice declarado sem valor é <code>nil</code>, com tamanho 0, e já pode receber <code>append</code>.</p>
+<hr>
+<h2>2. <code>len</code>, <code>cap</code> e <code>make</code></h2>
+<p><code>make([]int, 0, 2)</code> cria um slice vazio com espaço para 2. Quando o espaço acaba, o <code>append</code> arruma um array maior e copia tudo; repare como o <code>cap</code> pula:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	s := make([]int, 0, 2)
+	for i := 1; i &lt;= 5; i++ {
+		s = append(s, i)
+		fmt.Printf("len=%d cap=%d %v\n", len(s), cap(s), s)
+	}
+}</pre>
+<pre class="term" data-cwd="~/projetos/cap">$ go run main.go
+len=1 cap=2 [1]
+len=2 cap=2 [1 2]
+len=3 cap=4 [1 2 3]
+len=4 cap=4 [1 2 3 4]
+len=5 cap=8 [1 2 3 4 5]</pre>
+<hr>
+<h2>3. Fatias compartilham; <code>copy</code> copia</h2>
+<p>Uma fatia é uma janela sobre o mesmo array: escrever nela muda o original. Para ter uma cópia independente, use <code>copy</code>. O pacote <code>slices</code> traz funções prontas:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"slices"
+)
+
+func main() {
+	original := []int{1, 2, 3, 4}
+	pedaco := original[0:2]
+	pedaco[0] = 99
+	fmt.Println("original:", original, "pedaço:", pedaco)
+
+	copia := make([]int, len(original))
+	copy(copia, original)
+	copia[1] = 0
+	fmt.Println("original:", original, "cópia:", copia)
+
+	nomes := []string{"Rui", "Ana", "Bia"}
+	slices.Sort(nomes)
+	fmt.Println(nomes, slices.Contains(nomes, "Ana"), slices.Index(nomes, "Rui"))
+}</pre>
+<pre class="term" data-cwd="~/projetos/copy">$ go run main.go
+original: [99 2 3 4] pedaço: [99 2]
+original: [99 2 3 4] cópia: [99 0 3 4]
+[Ana Bia Rui] true 2</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Índice além do tamanho</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	lista := []int{1, 2, 3}
+	i := 5
+	fmt.Println(lista[i])
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-slice">$ go run main.go
+panic: runtime error: index out of range [5] with length 3
+
+goroutine 1 [running]:
+main.main()
+	/home/ana/projetos/erro-slice/main.go:8 +0x9
+exit status 2</pre></div>
+<div class="cenario"><strong><code>append</code> sem guardar o resultado</strong>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	lista := []int{1, 2}
+	append(lista, 3)
+	fmt.Println(lista)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-append">$ go run main.go
+# command-line-arguments
+./main.go:7:2: append(lista, 3) (value of type []int) is not used</pre>
+<p>Escreva <code>lista = append(lista, 3)</code>.</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>s := []int{1, 2}</code></td><td>Slice com valores.</td></tr>
+<tr><td><code>s = append(s, 3, 4)</code></td><td>Acrescenta itens (guarde o resultado).</td></tr>
+<tr><td><code>s[a:b]</code></td><td>Fatia de <code>a</code> até antes de <code>b</code>.</td></tr>
+<tr><td><code>make([]int, n, c)</code></td><td>Slice com <code>n</code> zeros e capacidade <code>c</code>.</td></tr>
+<tr><td><code>copy(dst, src)</code></td><td>Copia os itens.</td></tr>
+<tr><td><code>slices.Sort</code>, <code>slices.Contains</code></td><td>Ordena, procura.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Acrescentar</h3><p>Complete:</p><div class="ex-code">s = <input data-answer="append" aria-label="resposta">(s, "novo")</div></div>
+
+<div class="exercise"><h3>2. Fatia</h3><p>Complete para pegar as posições 1 e 2:</p><div class="ex-code">s[1:<input data-answer="3" aria-label="resposta">]</div></div>
+
+<div class="exercise"><h3>3. Capacidade</h3><p>Que função diz quanto cabe antes de realocar?</p><div class="ex-code"><input data-answer="cap" aria-label="resposta">(s)</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Qual a diferença entre <code>[3]int</code> e <code>[]int</code>?</p>
+<label><input type="radio" name="q4"> Nenhuma</label>
+<label><input type="radio" name="q4"> O primeiro é array (tamanho fixo); o segundo é slice (cresce)</label>
+<label><input type="radio" name="q4"> O segundo não aceita números</label>
+<label><input type="radio" name="q4"> O primeiro é mais lento</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. <code>p := s[0:2]</code> e depois <code>p[0] = 99</code>. E o <code>s[0]</code>?</p>
+<label><input type="radio" name="q5"> Continua igual</label>
+<label><input type="radio" name="q5"> Vira 99: a fatia compartilha o array</label>
+<label><input type="radio" name="q5"> Vira 0</label>
+<label><input type="radio" name="q5"> Dá panic</label></div>
+
+<div class="trycmd" data-goal="src:compras = append\(compras;;out:[arroz feijão café] 3;;semerro">
+<p class="try-task"><strong>Missão:</strong> comece com o slice vazio <code>compras</code> e use <code>append</code> para pôr <code>arroz</code>, <code>feijão</code> e <code>café</code>. Escreva o slice e o tamanho: <code>[arroz feijão café] 3</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	var compras []string
+	fmt.Println(compras, len(compras))
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	var compras []string
+	compras = append(compras, "arroz", "feijão", "café")
+	fmt.Println(compras, len(compras))
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+[arroz feijão café] 3
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:numeros\[0?:3\];;outre:^\[5 10 15\]$;;semerro">
+<p class="try-task"><strong>Missão:</strong> use uma fatia para escrever só os três primeiros números do slice: <code>[5 10 15]</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	numeros := []int{5, 10, 15, 20, 25}
+	fmt.Println(numeros)
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	numeros := []int{5, 10, 15, 20, 25}
+	fmt.Println(numeros[:3])
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+[5 10 15]
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Slice é lista que cresce: <code>s = append(s, x)</code>.</li>
+<li><code>s[a:b]</code> fatia; <code>len</code> e <code>cap</code> medem; <code>make</code> cria.</li>
+<li>Fatias compartilham o array; <code>copy</code> faz cópia independente.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>defer em Go — adiar para o fim da função, ordem e argumentos | Guia Go</title>
+<meta name="description" content="Como o defer funciona em Go: roda no fim da função, em ordem inversa, com os argumentos avaliados na hora; o uso com Close().">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">defer</span></h1>
+
+<p class="intro">O <code>defer</code> (adiar) agenda uma chamada para rodar <strong>quando a função terminar</strong>, aconteça o que acontecer. É o jeito Go de não esquecer de fechar um arquivo ou liberar um recurso: você escreve o “fechar” logo depois do “abrir”.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>O <code>defer</code> roda no fim da função, mesmo com <code>return</code> no meio.</li><li>Vários <code>defer</code> rodam em ordem inversa (o último agendado roda primeiro).</li><li>Os argumentos são avaliados na hora do <code>defer</code>, não no fim.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. A ideia</h2>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("abrindo a loja")
+	defer fmt.Println("fechando a loja")
+	fmt.Println("atendendo clientes")
+}</pre>
+<pre class="term" data-cwd="~/projetos/defer">$ go run main.go
+abrindo a loja
+atendendo clientes
+fechando a loja</pre>
+<p>O <code>defer</code> está na segunda linha, mas a frase dele saiu por último: ela esperou a <code>main</code> terminar.</p>
+<hr>
+<h2>2. Ordem inversa e argumentos na hora</h2>
+<p>Os <code>defer</code> formam uma pilha: o último a entrar é o primeiro a sair. E o valor de <code>x</code> foi “fotografado” quando o <code>defer</code> foi escrito (10), não no fim (20):</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	for i := 1; i &lt;= 3; i++ {
+		defer fmt.Println("defer", i)
+	}
+	x := 10
+	defer fmt.Println("x no defer:", x)
+	x = 20
+	fmt.Println("x no fim:", x)
+}</pre>
+<pre class="term" data-cwd="~/projetos/defer2">$ go run main.go
+x no fim: 20
+x no defer: 10
+defer 3
+defer 2
+defer 1</pre>
+<hr>
+<h2>3. O uso de verdade: fechar o que abriu</h2>
+<p>Abriu um arquivo? Escreva <code>defer f.Close()</code> logo em seguida. Mesmo que a função tenha vários <code>return</code>, o arquivo será fechado. Repare que, quando o <code>os.Open</code> falha, a função volta antes de chegar nos <code>defer</code>, e eles não rodam:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func lerTamanho(nome string) {
+	f, err := os.Open(nome)
+	if err != nil {
+		fmt.Println("erro:", err)
+		return
+	}
+	defer f.Close()
+	defer fmt.Println("fechando", nome)
+
+	info, _ := f.Stat()
+	fmt.Println(nome, "tem", info.Size(), "bytes")
+}
+
+func main() {
+	os.WriteFile("nota.txt", []byte("comprar pão\n"), 0644)
+	lerTamanho("nota.txt")
+	lerTamanho("sumiu.txt")
+}</pre>
+<pre class="term" data-cwd="~/projetos/defer3">$ go run main.go
+nota.txt tem 13 bytes
+fechando nota.txt
+erro: open sumiu.txt: no such file or directory</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong><code>defer</code> sem chamar a função</strong>
+<p>O <code>defer</code> precisa de uma <em>chamada</em>, com parênteses:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	defer fmt.Println
+	fmt.Println("oi")
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-defer">$ go run main.go
+# command-line-arguments
+./main.go:6:8: expression in defer must be function call</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>defer f()</code></td><td>Roda <code>f()</code> quando a função atual terminar.</td></tr>
+<tr><td><code>defer arquivo.Close()</code></td><td>O uso mais comum: fechar o que abriu.</td></tr>
+<tr><td>vários <code>defer</code></td><td>Rodam do último para o primeiro.</td></tr>
+<tr><td><code>defer fmt.Println(x)</code></td><td>O <code>x</code> é lido na hora do <code>defer</code>.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Adiar</h3><p>Complete para fechar o arquivo no fim da função:</p><div class="ex-code"><input data-answer="defer" aria-label="resposta"> f.Close()</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">2. Com <code>defer A()</code> e depois <code>defer B()</code>, em que ordem eles rodam?</p>
+<label><input type="radio" name="q2"> A, depois B</label>
+<label><input type="radio" name="q2"> B, depois A</label>
+<label><input type="radio" name="q2"> Ao mesmo tempo</label>
+<label><input type="radio" name="q2"> Só o último roda</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. <code>x := 1; defer fmt.Println(x); x = 2</code> escreve:</p>
+<label><input type="radio" name="q3"> 2</label>
+<label><input type="radio" name="q3"> 1</label>
+<label><input type="radio" name="q3"> Nada</label>
+<label><input type="radio" name="q3"> Não compila</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Quando um <code>defer</code> roda?</p>
+<label><input type="radio" name="q4"> Na hora em que é escrito</label>
+<label><input type="radio" name="q4"> Quando a função em que ele está termina</label>
+<label><input type="radio" name="q4"> Quando o programa inteiro termina</label>
+<label><input type="radio" name="q4"> Só se houver erro</label></div>
+
+<div class="trycmd" data-goal="src:defer fmt\.Println\(&quot;tchau!&quot;\);;outre:^olá\ntudo bem\?\ntchau!$;;semerro">
+<p class="try-task"><strong>Missão:</strong> use <code>defer</code> para que a mensagem <code>tchau!</code> seja a <strong>última</strong> linha, mesmo escrita logo no começo da <code>main</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("tchau!")
+	fmt.Println("olá")
+	fmt.Println("tudo bem?")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	defer fmt.Println("tchau!")
+	fmt.Println("olá")
+	fmt.Println("tudo bem?")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+olá
+tudo bem?
+tchau!
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:defer fmt\.Println\(i\);;outre:^3\n2\n1$;;semerro">
+<p class="try-task"><strong>Missão:</strong> agende três <code>defer</code> num <code>for</code> de 1 a 3 e veja a ordem. A saída deve ser <code>3</code>, <code>2</code> e <code>1</code>, uma por linha.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	for i := 1; i &lt;= 3; i++ {
+		fmt.Println(i)
+	}
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	for i := 1; i &lt;= 3; i++ {
+		defer fmt.Println(i)
+	}
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+3
+2
+1
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>defer</code> adia a chamada para o fim da função.</li>
+<li>Vários <code>defer</code> rodam em ordem inversa.</li>
+<li>Os argumentos são avaliados na hora; use <code>defer f.Close()</code> logo depois de abrir.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
