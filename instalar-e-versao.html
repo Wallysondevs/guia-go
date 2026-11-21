@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instalação e versão do Go — go version e go env | Guia Go</title>
+<meta name="description" content="Como instalar o Go no Windows, macOS e Linux e conferir a instalação com go version e go env.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Instalação e versão (<span class="hl">go version</span>)</h1>
+
+<p class="intro">Antes de escrever código você precisa do Go instalado. Nesta aula você instala, confere a versão com <code>go version</code> e descobre onde o Go guarda as coisas com <code>go env</code>.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Instalar o Go pelo site oficial (<code>go.dev/dl</code>) no seu sistema.</li><li>Conferir a instalação com <code>go version</code> e <code>which go</code>.</li><li>Ler as variáveis do Go com <code>go env</code>: <code>GOOS</code>, <code>GOARCH</code>, <code>GOPATH</code>, <code>GOROOT</code>.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Instalando</h2>
+<p>O Go oficial vem de <a href="https://go.dev/dl/">go.dev/dl</a>. Escolha o instalador do seu sistema:</p>
+<div class="table-wrap"><table class="ref">
+<tr><th>Sistema</th><th>Como instalar</th></tr>
+<tr><td>Windows</td><td>Baixe o <code>.msi</code> e avance o instalador. Depois feche e abra de novo o terminal.</td></tr>
+<tr><td>macOS</td><td>Baixe o <code>.pkg</code> e instale. Ou, com Homebrew, <code>brew install go</code>.</td></tr>
+<tr><td>Linux</td><td>Baixe o <code>.tar.gz</code>, extraia em <code>/usr/local</code> e ponha <code>/usr/local/go/bin</code> no <code>PATH</code>. Os pacotes das distros (<code>apt install golang</code>) costumam vir com uma versão mais antiga.</td></tr>
+</table></div>
+<p>No Linux, o passo a passo oficial é este (troque o nome do arquivo pela versão que você baixou):</p>
+<pre class="file" data-file="terminal">sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf go1.27.3.linux-amd64.tar.gz
+echo 'export PATH=$PATH:/usr/local/go/bin' &gt;&gt; ~/.profile</pre>
+<hr>
+<h2>2. Conferindo a versão</h2>
+<p>O primeiro comando de todo mundo depois de instalar é o <code>go version</code>. Ele mostra a versão, o sistema e a arquitetura:</p>
+<pre class="term" data-cwd="~/projetos">$ go version
+go version go1.27.3 linux/amd64</pre>
+<dl class="anatomy"><dt>go1.27.3</dt><dd>a versão do Go: 1.27, correção 3.</dd><dt>linux</dt><dd>o sistema operacional (<code>GOOS</code>).</dd><dt>amd64</dt><dd>a arquitetura do processador (<code>GOARCH</code>): 64 bits Intel/AMD.</dd></dl>
+<p>Para saber <strong>qual</strong> arquivo <code>go</code> o terminal está usando, use <code>which go</code> (no Windows, <code>where go</code>). Neste computador o <code>which</code> achou um atalho em <code>/usr/local/bin</code>, e o <code>readlink -f</code> mostrou para onde ele aponta, a pasta <code>/usr/local/go/bin</code> da instalação oficial:</p>
+<pre class="term" data-cwd="~/projetos">$ which go
+/usr/local/bin/go
+$ readlink -f "$(which go)"
+/usr/local/go/bin/go</pre>
+<hr>
+<h2>3. As variáveis do Go: <code>go env</code></h2>
+<p>O <code>go env</code> mostra a configuração da ferramenta. Passando nomes, ele mostra só esses valores, um por linha:</p>
+<pre class="term" data-cwd="~/projetos">$ go env GOOS GOARCH
+linux
+amd64
+$ go env GOROOT GOPATH GOCACHE
+/usr/local/go
+/home/ana/go
+/home/ana/.cache/go-build</pre>
+<div class="table-wrap"><table class="ref">
+<tr><th>Variável</th><th>O que é</th></tr>
+<tr><td><code>GOOS</code> / <code>GOARCH</code></td><td>Sistema e processador para os quais o Go compila. Mudá-los é o <a href="build-cruzado.html">build cruzado</a>.</td></tr>
+<tr><td><code>GOROOT</code></td><td>Onde o próprio Go está instalado.</td></tr>
+<tr><td><code>GOPATH</code></td><td>A pasta de trabalho do Go na sua casa (por padrão <code>~/go</code>). Lá ficam os módulos baixados e os programas instalados com <code>go install</code>.</td></tr>
+<tr><td><code>GOCACHE</code></td><td>O cache de compilação, que deixa a segunda compilação muito mais rápida.</td></tr>
+</table></div>
+<hr>
+<h2>4. A versão de dentro do programa</h2>
+<p>O pacote <code>runtime</code> sabe a versão e o sistema em que o programa foi compilado:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	fmt.Println("versão:", runtime.Version())
+	fmt.Println("sistema:", runtime.GOOS)
+	fmt.Println("arquitetura:", runtime.GOARCH)
+}</pre>
+<pre class="term" data-cwd="~/projetos/versao">$ go run main.go
+versão: go1.27.3
+sistema: linux
+arquitetura: amd64</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>O terminal não acha o <code>go</code></strong>
+<p>Se o Go não estiver no <code>PATH</code>, o terminal não encontra o programa. Para mostrar isso sem desinstalar nada, rodamos o <code>go version</code> com um <code>PATH</code> sem a pasta do Go, usando <code>env PATH=…</code>:</p>
+<pre class="term" data-cwd="~/projetos">$ env PATH=/usr/bin:/bin go version
+env: ‘go’: No such file or directory</pre>
+<p>A solução é pôr <code>/usr/local/go/bin</code> no <code>PATH</code> (veja o passo da seção 1) e abrir um terminal novo. No Windows, feche e reabra o terminal depois de instalar. No Prompt de Comando a mensagem é <code>'go' não é reconhecido como um comando interno ou externo</code>.</p></div>
+<div class="cenario"><strong>Subcomando que não existe</strong>
+<p>Um erro de digitação no subcomando também é avisado pela ferramenta:</p>
+<pre class="term" data-cwd="~/projetos">$ go rum main.go
+go rum: unknown command
+Run 'go help' for usage.</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>go version</code></td><td>Versão, sistema e arquitetura.</td></tr>
+<tr><td><code>which go</code> / <code>where go</code></td><td>Qual executável <code>go</code> o terminal usa.</td></tr>
+<tr><td><code>go env GOOS GOARCH</code></td><td>Mostra só essas variáveis.</td></tr>
+<tr><td><code>runtime.Version()</code></td><td>A versão do Go, de dentro do programa.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Complete o comando</h3><p>Complete para ver a versão instalada:</p><div class="ex-code">go <input data-answer="version" aria-label="resposta"></div></div>
+
+<div class="exercise"><h3>2. Só uma variável</h3><p>Complete para ver só a pasta de trabalho do Go:</p><div class="ex-code">go env <input data-answer="GOPATH" aria-label="resposta"></div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. Na linha <code>go version go1.27.3 linux/amd64</code>, o que é <code>amd64</code>?</p>
+<label><input type="radio" name="q3"> A versão do Go</label>
+<label><input type="radio" name="q3"> A arquitetura do processador</label>
+<label><input type="radio" name="q3"> O nome do computador</label>
+<label><input type="radio" name="q3"> O sistema operacional</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. O que é o <code>GOPATH</code>?</p>
+<label><input type="radio" name="q4"> A pasta onde o Go foi instalado</label>
+<label><input type="radio" name="q4"> A pasta de trabalho do Go na sua casa, com módulos baixados e programas instalados</label>
+<label><input type="radio" name="q4"> Uma variável do Windows só</label>
+<label><input type="radio" name="q4"> O cache de compilação</label></div>
+
+<div class="trycmd" data-goal="src:runtime\.GOARCH;;outre:^versão: go1\.\d+;;outre:^arquitetura: \w+;;semerro">
+<p class="try-task"><strong>Missão:</strong> complete o programa para escrever também a arquitetura, com <code>runtime.GOARCH</code>, numa linha que comece com <code>arquitetura:</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	fmt.Println("versão:", runtime.Version())
+	fmt.Println("sistema:", runtime.GOOS)
+	// escreva aqui a arquitetura
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	fmt.Println("versão:", runtime.Version())
+	fmt.Println("sistema:", runtime.GOOS)
+	fmt.Println("arquitetura:", runtime.GOARCH)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+versão: go1.27.3
+sistema: linux
+arquitetura: amd64
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Instale pelo <code>go.dev/dl</code> e confira com <code>go version</code>.</li>
+<li><code>go env</code> mostra a configuração; <code>GOOS</code> e <code>GOARCH</code> dizem para onde o Go compila.</li>
+<li>Se o terminal não acha o <code>go</code>, falta a pasta do Go no <code>PATH</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# saídas brutas e anonimizadas das coletas: NÃO versionar
+_saidas/
+_saidas-anon/
+node_modules/
+tools/node_modules/
+*.bak
+__pycache__/
+# executáveis gerados ao testar
+/main
+/ola

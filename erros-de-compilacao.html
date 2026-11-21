@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lendo erros de compilação em Go — arquivo:linha:coluna | Guia Go</title>
+<meta name="description" content="Como ler um erro do compilador Go: arquivo, linha, coluna e mensagem. Variável não usada, import não usado, undefined, tipos incompatíveis e erro de sintaxe.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Lendo <span class="hl">erros de compilação</span></h1>
+
+<p class="intro">O compilador do Go é exigente, e isso é bom: ele pega muitos erros antes de o programa rodar. Nesta aula você aprende a <strong>ler</strong> a mensagem, que sempre diz o arquivo, a linha e a coluna, e conhece os erros que todo iniciante vê na primeira semana.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Ler <code>./main.go:6:2: mensagem</code>: arquivo, linha, coluna e o que deu errado.</li><li>Os erros típicos: variável e import não usados, nome indefinido, tipo errado, sintaxe.</li><li>Por que o Go trata variável não usada como erro, e não como aviso.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. A anatomia do erro</h2>
+<p>Este programa cria uma variável e nunca a usa. Em Go, isso não compila:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	idade := 30
+	fmt.Println("Olá!")
+}</pre>
+<pre class="term" data-cwd="~/projetos/erros1">$ go run main.go
+# command-line-arguments
+./main.go:6:2: declared and not used: idade</pre>
+<dl class="anatomy"><dt># command-line-arguments</dt><dd>o pacote que estava sendo compilado (um arquivo solto passado ao <code>go run</code> ganha esse nome).</dd><dt>./main.go</dt><dd>o arquivo.</dd><dt>:6:2</dt><dd>linha 6, coluna 2.</dd><dt>declared and not used: idade</dt><dd>a mensagem: “declarada e não usada: idade”.</dd></dl>
+<p>Variável sem uso costuma ser um esquecimento ou um erro de digitação. Por isso o Go recusa o programa em vez de só avisar. A saída é usá-la ou apagá-la.</p>
+<hr>
+<h2>2. Import não usado</h2>
+<p>Pelo mesmo motivo, importar um pacote e não usar também é erro:</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	fmt.Println("Olá!")
+}</pre>
+<pre class="term" data-cwd="~/projetos/erros2">$ go run main.go
+# command-line-arguments
+./main.go:5:2: "os" imported and not used</pre>
+<hr>
+<h2>3. <code>undefined</code>: nome que não existe</h2>
+<p>Erro de digitação no nome de uma variável ou função. Aqui <code>nome</code> virou <code>nomee</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	nome := "Ana"
+	fmt.Println("Olá,", nomee)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erros3">$ go run main.go
+# command-line-arguments
+./main.go:6:2: declared and not used: nome
+./main.go:7:23: undefined: nomee</pre>
+<p>Vieram <strong>dois</strong> erros de um engano só: como o <code>Println</code> usa <code>nomee</code>, a variável <code>nome</code> ficou sem uso (linha 6), e <code>nomee</code> não existe (linha 7, coluna 23). Corrigindo a digitação, os dois somem.</p>
+<hr>
+<h2>4. Tipos que não combinam</h2>
+<p>Go não mistura texto com número sozinho. Somar uma <code>string</code> com um <code>int</code> não compila:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	idade := 30
+	fmt.Println("Idade: " + idade)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erros4">$ go run main.go
+# command-line-arguments
+./main.go:7:14: invalid operation: "Idade: " + idade (mismatched types untyped string and int)</pre>
+<p>A aula <a href="conversao.html">Conversão de Tipos</a> mostra como transformar um no outro.</p>
+<hr>
+<h2>5. Vários erros de uma vez</h2>
+<p>O compilador lista vários erros de uma vez. Corrija <strong>do primeiro para o último</strong>: às vezes um erro causa os seguintes.</p>
+<pre class="file" data-file="main.go">package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	x := 1
+	y := 2
+	fmt.Println("soma:", x+z)
+}</pre>
+<pre class="term" data-cwd="~/projetos/erros5">$ go run main.go
+# command-line-arguments
+./main.go:5:2: "strings" imported and not used
+./main.go:10:2: declared and not used: y
+./main.go:11:25: undefined: z</pre>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Erro de sintaxe: parêntese aberto</strong>
+<p>Quando falta um parêntese, o compilador para no primeiro lugar em que a frase “não faz sentido”:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("faltou fechar o parêntese"
+}</pre>
+<pre class="term" data-cwd="~/projetos/erros6">$ go run main.go
+# command-line-arguments
+./main.go:6:42: syntax error: unexpected newline in argument list; possibly missing comma or )</pre>
+<p>O compilador apontou a linha 6, coluna 42: bem no fim da linha, onde ele esperava uma vírgula ou o <code>)</code> e encontrou a quebra de linha. A própria mensagem sugere: <code>possibly missing comma or )</code>.</p></div>
+<div class="cenario"><strong>Chave que nunca fecha</strong>
+<p>Se falta a última <code>}</code>, o arquivo acaba antes da hora:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("faltou fechar a chave")</pre>
+<pre class="term" data-cwd="~/projetos/erros7">$ go run main.go
+# command-line-arguments
+./main.go:7:1: syntax error: unexpected EOF, expected }</pre>
+<p><code>unexpected EOF</code> quer dizer “o arquivo acabou de repente” (<em>end of file</em>).</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>declared and not used: x</code></td><td>Variável criada e nunca usada: use ou apague.</td></tr>
+<tr><td><code>"os" imported and not used</code></td><td>Import sobrando: apague a linha.</td></tr>
+<tr><td><code>undefined: x</code></td><td>Nome que não existe (digitação? outro arquivo?).</td></tr>
+<tr><td><code>mismatched types</code></td><td>Tipos diferentes na mesma conta.</td></tr>
+<tr><td><code>syntax error: unexpected …</code></td><td>Faltou ou sobrou parêntese, chave, vírgula.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. A linha</h3><p>No erro <code>./main.go:6:2: declared and not used: idade</code>, qual é a linha?</p><div class="ex-code">linha <input data-answer="6" aria-label="resposta"></div></div>
+
+<div class="exercise"><h3>2. A coluna</h3><p>E a coluna?</p><div class="ex-code">coluna <input data-answer="2" aria-label="resposta"></div></div>
+
+<div class="mc" data-answer="3"><p class="mc-q">3. O que o Go faz com uma variável declarada e nunca usada?</p>
+<label><input type="radio" name="q3"> Ignora</label>
+<label><input type="radio" name="q3"> Mostra um aviso e compila</label>
+<label><input type="radio" name="q3"> Recusa compilar: é erro</label>
+<label><input type="radio" name="q3"> Apaga a variável sozinho</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. O que <code>undefined: nomee</code> quer dizer?</p>
+<label><input type="radio" name="q4"> Que a variável está vazia</label>
+<label><input type="radio" name="q4"> Que o nome <code>nomee</code> não existe naquele lugar</label>
+<label><input type="radio" name="q4"> Que falta um import</label>
+<label><input type="radio" name="q4"> Que o tipo está errado</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. Com vários erros na tela, por onde começar?</p>
+<label><input type="radio" name="q5"> Pelo último</label>
+<label><input type="radio" name="q5"> Pelo primeiro: às vezes ele causa os outros</label>
+<label><input type="radio" name="q5"> Tanto faz, corrija todos ao mesmo tempo</label>
+<label><input type="radio" name="q5"> Recompilar até sumir</label></div>
+
+<div class="trycmd" data-goal="src:fmt\.Println\(&quot;Ana mora em&quot;, cidade\);;out:Ana mora em Recife;;semerro">
+<p class="try-task"><strong>Missão:</strong> este programa não compila por causa de uma variável não usada. Faça o programa usar a variável <code>cidade</code> no <code>Println</code>, para escrever <code>Ana mora em Recife</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	cidade := "Recife"
+	fmt.Println("Ana mora em")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	cidade := "Recife"
+	fmt.Println("Ana mora em", cidade)
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Ana mora em Recife
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:&quot;strings&quot;;;erro:&quot;strings&quot; imported and not used">
+<p class="try-task"><strong>Missão:</strong> rode este programa <strong>como está</strong> e cole o erro do compilador. A missão confere se apareceu a mensagem do import não usado.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	fmt.Println("Olá!")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	fmt.Println("Olá!")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+# command-line-arguments
+./main.go:5:2: "strings" imported and not used
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>O erro diz arquivo, linha e coluna: <code>./main.go:6:2:</code>.</li>
+<li>Variável e import sem uso são erros, não avisos.</li>
+<li><code>undefined</code> é nome que não existe; <code>mismatched types</code> é mistura de tipos.</li>
+<li>Corrija do primeiro erro para o último.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

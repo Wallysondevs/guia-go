@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Módulos em Go — go mod init, go.mod e go run . | Guia Go</title>
+<meta name="description" content="Como criar um projeto Go com go mod init, o que tem no go.mod e por que usar go run . e go build sem nome de arquivo.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Módulos (<span class="hl">go mod init</span>)</h1>
+
+<p class="intro">Um <strong>módulo</strong> é o “projeto” do Go: uma pasta com um arquivo <code>go.mod</code> que diz o nome do projeto e a versão do Go. Todo projeto de verdade começa com <code>go mod init</code>, e é com o módulo que você usa vários arquivos, pacotes e testes.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Criar um módulo com <code>go mod init</code> e ler o <code>go.mod</code>.</li><li>Rodar e compilar o módulo inteiro com <code>go run .</code> e <code>go build</code>.</li><li>Ver um módulo com dois arquivos no mesmo pacote.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. Criando o módulo</h2>
+<p>Dentro de uma pasta vazia, rode <code>go mod init</code> com o nome do módulo. Para projetos pessoais, um nome curto basta; se for publicar no GitHub, o costume é usar o endereço, como <code>github.com/ana/loja</code>:</p>
+<pre class="term" data-cwd="~/projetos/loja">$ go mod init loja
+go: creating new go.mod: module loja
+$ cat go.mod
+module loja
+
+go 1.27.3</pre>
+<dl class="anatomy"><dt>module loja</dt><dd>o nome do módulo: é o começo do caminho de import dos pacotes dele.</dd><dt>go 1.27.3</dt><dd>a versão do Go com que o módulo foi criado.</dd></dl>
+<hr>
+<h2>2. <code>go run .</code> e <code>go build</code></h2>
+<p>Com o módulo criado, o ponto (<code>.</code>) quer dizer “o pacote desta pasta”. O <code>go build</code> sem argumentos gera um executável com o <strong>nome do módulo</strong>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Loja da Ana: aberta!")
+}</pre>
+<pre class="term" data-cwd="~/projetos/loja">$ go run .
+Loja da Ana: aberta!
+$ go build
+$ ls
+go.mod
+loja
+main.go
+$ ./loja
+Loja da Ana: aberta!</pre>
+<hr>
+<h2>3. Dois arquivos, um pacote</h2>
+<p>Todos os arquivos <code>.go</code> da mesma pasta são o mesmo pacote e enxergam as funções uns dos outros. Crie um <code>precos.go</code> ao lado do <code>main.go</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Café custa", precoDoCafe(), "reais")
+}</pre>
+<pre class="file" data-file="precos.go">package main
+
+func precoDoCafe() float64 {
+	return 4.5
+}</pre>
+<pre class="term" data-cwd="~/projetos/loja2">$ go run .
+Café custa 4.5 reais</pre>
+<p>Com <code>go run main.go</code> o Go compilaria só um arquivo e não acharia o <code>precoDoCafe</code>. Com <code>go run .</code>, ele compila a pasta toda. Veja o erro em “Quando dá errado”.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>Rodou um arquivo só</strong>
+<p>No módulo <code>loja2</code>, rodar só o <code>main.go</code> deixa o <code>precos.go</code> de fora:</p>
+<pre class="term" data-cwd="~/projetos/loja2">$ go run main.go
+# command-line-arguments
+./main.go:6:29: undefined: precoDoCafe</pre>
+<p>A mensagem <code>undefined: precoDoCafe</code> quer dizer “não sei o que é isso”. Rode <code>go run .</code>.</p></div>
+<div class="cenario"><strong>O módulo já existe</strong>
+<p>Rodar <code>go mod init</code> de novo na mesma pasta:</p>
+<pre class="term" data-cwd="~/projetos/loja">$ go mod init loja
+go: /home/ana/projetos/loja/go.mod already exists</pre></div>
+<div class="cenario"><strong>Sem <code>go.mod</code></strong>
+<p>Numa pasta sem módulo (a <code>solto</code>, só com o <code>main.go</code>), o <code>go build .</code> reclama:</p>
+<pre class="term" data-cwd="~/projetos/solto">$ go build .
+go: go.mod file not found in current directory or any parent directory; see 'go help modules'</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>go mod init nome</code></td><td>Cria o <code>go.mod</code> do módulo.</td></tr>
+<tr><td><code>go run .</code></td><td>Roda o pacote da pasta atual (todos os arquivos).</td></tr>
+<tr><td><code>go build</code></td><td>Gera o executável com o nome do módulo.</td></tr>
+<tr><td><code>cat go.mod</code></td><td>Mostra o nome do módulo e a versão do Go.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Criar o módulo</h3><p>Complete para criar o módulo <code>agenda</code>:</p><div class="ex-code">go mod <input data-answer="init" aria-label="resposta"> agenda</div></div>
+
+<div class="exercise"><h3>2. A pasta toda</h3><p>Complete para rodar todos os arquivos da pasta:</p><div class="ex-code">go run <input data-answer="." aria-label="resposta"></div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. O que fica no arquivo <code>go.mod</code>?</p>
+<label><input type="radio" name="q3"> O código do programa</label>
+<label><input type="radio" name="q3"> O nome do módulo e a versão do Go (e as dependências)</label>
+<label><input type="radio" name="q3"> O executável</label>
+<label><input type="radio" name="q3"> As senhas do projeto</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Por que <code>go run main.go</code> deu <code>undefined: precoDoCafe</code>?</p>
+<label><input type="radio" name="q4"> Porque a função estava errada</label>
+<label><input type="radio" name="q4"> Porque compilou só o <code>main.go</code>, sem o <code>precos.go</code></label>
+<label><input type="radio" name="q4"> Porque faltou o <code>go.mod</code></label>
+<label><input type="radio" name="q4"> Porque o Go não aceita dois arquivos</label></div>
+
+<div class="trycmd" data-goal="src:&quot;Agenda pronta&quot;;;out:Agenda pronta;;semerro">
+<p class="try-task"><strong>Missão:</strong> crie um módulo chamado <code>agenda</code> (<code>go mod init agenda</code>) com este <code>main.go</code>, troque a mensagem para <code>Agenda pronta</code> e rode com <code>go run .</code>.</p>
+<pre class="script" data-file="main.go" data-cmd="go run .">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Loja da Ana: aberta!")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Agenda pronta")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Agenda pronta
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>go mod init nome</code> cria o módulo, com o <code>go.mod</code>.</li>
+<li><code>go run .</code> e <code>go build</code> trabalham com a pasta inteira.</li>
+<li>Arquivos da mesma pasta são o mesmo pacote.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

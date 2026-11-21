@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Olá, Mundo em Go — package main, import e func main | Guia Go</title>
+<meta name="description" content="O primeiro programa em Go explicado linha por linha: package main, import &quot;fmt&quot;, func main e fmt.Println.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>Olá, <span class="hl">Mundo</span></h1>
+
+<p class="intro">Todo curso começa com um programa que escreve <code>Olá, mundo!</code>. Em Go ele tem só sete linhas, e cada uma ensina uma regra da linguagem. Nesta aula você escreve, roda e entende cada pedaço.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>As três partes de todo programa Go: <code>package main</code>, <code>import</code> e <code>func main()</code>.</li><li>A diferença entre <code>fmt.Println</code> e <code>fmt.Print</code>.</li><li>Os erros mais comuns do primeiro programa, com a mensagem real do compilador.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. O programa</h2>
+<p>Crie uma pasta, abra um editor de texto e salve este conteúdo num arquivo chamado <code>main.go</code>. Depois, no terminal, dentro dessa pasta, rode <code>go run main.go</code>:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Olá, mundo!")
+}</pre>
+<pre class="term" data-cwd="~/projetos/ola">$ go run main.go
+Olá, mundo!</pre>
+<hr>
+<h2>2. Linha por linha</h2>
+<dl class="anatomy"><dt>package main</dt><dd>todo arquivo Go pertence a um pacote. O pacote <code>main</code> é especial: é o que vira um programa executável.</dd><dt>import "fmt"</dt><dd>traz o pacote <code>fmt</code> (de <em>format</em>), da biblioteca padrão, que escreve e formata texto.</dd><dt>func main()</dt><dd>a função por onde o programa começa. Quando ela termina, o programa termina.</dd><dt>fmt.Println(…)</dt><dd>escreve os valores e pula uma linha no fim. O <code>P</code> maiúsculo importa (veja o Nível 2: nomes com maiúscula são exportados).</dd></dl>
+<p>As chaves <code>{ }</code> marcam onde a função começa e termina. Em Go a chave de abertura <strong>tem que</strong> ficar na mesma linha do <code>func main()</code>: isso não é gosto, é regra (veja “Quando dá errado”).</p>
+<hr>
+<h2>3. <code>Println</code> e <code>Print</code></h2>
+<p>O <code>Println</code> aceita vários valores, separa com espaço e pula linha no fim. O <code>Print</code> não pula linha: para isso você escreve <code>\n</code>, a “quebra de linha”.</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Olá, mundo!")
+	fmt.Println("Meu nome é Ana", "e tenho", 30, "anos")
+	fmt.Print("sem quebra de linha ")
+	fmt.Print("no fim\n")
+}</pre>
+<pre class="term" data-cwd="~/projetos/ola2">$ go run main.go
+Olá, mundo!
+Meu nome é Ana e tenho 30 anos
+sem quebra de linha no fim</pre>
+<p>Repare que o número <code>30</code> entrou sem aspas: ele é um número, não um texto. O <code>Println</code> sabe escrever os dois.</p>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>A chave na linha de baixo</strong>
+<p>Quem vem de C ou Java às vezes põe a <code>{</code> na linha seguinte. Em Go isso não compila:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main()
+{
+	fmt.Println("Olá, mundo!")
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-chave">$ go run main.go
+# command-line-arguments
+./main.go:6:1: syntax error: unexpected semicolon or newline before {</pre>
+<p>O Go põe um ponto e vírgula invisível no fim da linha <code>func main()</code>, e aí a função fica “sem corpo”. Mantenha a <code>{</code> na mesma linha.</p></div>
+<div class="cenario"><strong>Texto com aspas simples</strong>
+<p>Em Go, texto (<code>string</code>) vai entre <strong>aspas duplas</strong>. Aspas simples são para um caractere só (uma <em>rune</em>, aula <a href="strings-e-runes.html">Strings e Runes</a>):</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Println('Olá, mundo!')
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-aspas">$ go run main.go
+# command-line-arguments
+./main.go:6:14: more than one character in rune literal</pre></div>
+<div class="cenario"><strong>Esqueceu o <code>package main</code></strong>
+<p>Com outro nome de pacote, o arquivo vira uma biblioteca, e o <code>go run</code> não sabe o que executar:</p>
+<pre class="file" data-file="main.go">package ola
+
+import "fmt"
+
+func main() {
+	fmt.Println("Olá, mundo!")
+}</pre>
+<pre class="term" data-cwd="~/projetos/erro-pacote">$ go run main.go
+package command-line-arguments is not a main package</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>package main</code></td><td>Pacote de um programa executável.</td></tr>
+<tr><td><code>import "fmt"</code></td><td>Traz o pacote de formatação de texto.</td></tr>
+<tr><td><code>func main() { … }</code></td><td>Onde o programa começa.</td></tr>
+<tr><td><code>fmt.Println(a, b)</code></td><td>Escreve separando com espaço e pula linha.</td></tr>
+<tr><td><code>fmt.Print("…\n")</code></td><td>Escreve sem pular linha (a não ser com <code>\n</code>).</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Complete o pacote</h3><p>Todo programa executável começa com:</p><div class="ex-code">package <input data-answer="main" aria-label="resposta"></div></div>
+
+<div class="exercise"><h3>2. Complete o import</h3><p>Traga o pacote que escreve texto:</p><div class="ex-code">import "<input data-answer="fmt" aria-label="resposta">"</div></div>
+
+<div class="exercise"><h3>3. Complete a chamada</h3><p>Escreva o texto e pule uma linha:</p><div class="ex-code">fmt.<input data-answer="Println" aria-label="resposta">("Olá, mundo!")</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Por onde um programa Go começa a rodar?</p>
+<label><input type="radio" name="q4"> Pela primeira linha do arquivo</label>
+<label><input type="radio" name="q4"> Pela função <code>main</code> do pacote <code>main</code></label>
+<label><input type="radio" name="q4"> Pelo <code>import</code></label>
+<label><input type="radio" name="q4"> Pela função com o nome do arquivo</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">5. Qual a diferença entre <code>Println</code> e <code>Print</code>?</p>
+<label><input type="radio" name="q5"> Nenhuma</label>
+<label><input type="radio" name="q5"> <code>Println</code> pula linha no fim e separa valores com espaço; <code>Print</code> não pula linha</label>
+<label><input type="radio" name="q5"> <code>Print</code> só escreve números</label>
+<label><input type="radio" name="q5"> <code>Println</code> escreve num arquivo</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">6. Por que <code>fmt.Println('Olá')</code> não compila?</p>
+<label><input type="radio" name="q6"> Porque falta ponto e vírgula</label>
+<label><input type="radio" name="q6"> Porque texto vai entre aspas duplas; aspas simples são para um caractere só</label>
+<label><input type="radio" name="q6"> Porque <code>Println</code> não aceita texto</label>
+<label><input type="radio" name="q6"> Porque falta o <code>return</code></label></div>
+
+<div class="trycmd" data-goal="src:fmt\.Println\(&quot;Estou aprendendo Go&quot;\);;outre:^Olá, mundo!\nEstou aprendendo Go$;;semerro">
+<p class="try-task"><strong>Missão:</strong> escreva um programa que mostre duas linhas: <code>Olá, mundo!</code> e, embaixo, <code>Estou aprendendo Go</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Olá, mundo!")
+	// escreva a segunda linha aqui
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Olá, mundo!")
+	fmt.Println("Estou aprendendo Go")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Olá, mundo!
+Estou aprendendo Go
+</pre>
+</div>
+
+<div class="trycmd" data-goal="src:fmt\.Println\(&quot;Ana tem&quot;, 30, &quot;anos&quot;\);;out:Ana tem 30 anos;;semerro">
+<p class="try-task"><strong>Missão:</strong> use <code>fmt.Println</code> com <strong>três valores</strong> separados por vírgula para escrever <code>Ana tem 30 anos</code> (o 30 sem aspas).</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Ana tem")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Ana tem", 30, "anos")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Ana tem 30 anos
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Todo programa tem <code>package main</code>, os <code>import</code> e a <code>func main()</code>.</li>
+<li><code>fmt.Println</code> escreve e pula linha; <code>fmt.Print</code> não pula.</li>
+<li>A <code>{</code> fica na mesma linha; texto vai entre aspas duplas.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

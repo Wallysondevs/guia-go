@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>O que é Go — a linguagem, o compilador e a ferramenta go | Guia Go</title>
+<meta name="description" content="O que é a linguagem Go, para que ela serve, como um programa Go vira um executável e como este guia funciona.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1>O que é <span class="hl">Go</span></h1>
+
+<p class="intro">Go (ou Golang) é uma linguagem de programação criada no Google e lançada em 2009. Ela é <strong>compilada</strong>: o seu código vira um programa executável de verdade, que roda sem precisar do Go instalado. Nesta aula você entende o que isso quer dizer e conhece a ferramenta <code>go</code>, que você vai usar em todas as aulas.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>O que é uma linguagem compilada e por que o Go é rápido de compilar.</li><li>Onde o Go é usado: servidores, ferramentas de linha de comando, nuvem (Docker e Kubernetes são escritos em Go).</li><li>Como este guia funciona: você copia o código, roda no seu computador e cola a saída para conferir.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>A ideia: uma receita que vira um prato pronto</h2>
+<p>Pense no código-fonte como uma <strong>receita</strong> escrita em português. O computador não entende a receita: ele só entende o prato pronto. O <strong>compilador</strong> é o cozinheiro que lê a receita inteira, avisa se faltou algum ingrediente (os <em>erros de compilação</em>) e entrega o prato: um arquivo executável.</p>
+<p>Em linguagens <em>interpretadas</em>, como Python e JavaScript, o cozinheiro vai lendo e cozinhando linha por linha, na hora de servir. Em Go, tudo é conferido <strong>antes</strong>. Por isso muitos erros que no Python só aparecem com o programa rodando, em Go aparecem já na compilação.</p>
+<hr>
+<h2>1. Um programa Go de verdade</h2>
+<p>Este é o menor programa Go útil. Não se preocupe com cada palavra agora: a aula <a href="ola-mundo.html">Olá, Mundo</a> explica linha por linha.</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Olá, mundo!")
+}</pre>
+<pre class="term" data-cwd="~/projetos/ola">$ go run main.go
+Olá, mundo!</pre>
+<p>O comando <code>go run main.go</code> compilou o arquivo e rodou o resultado na hora. A única coisa que o programa faz é escrever <code>Olá, mundo!</code>.</p>
+<hr>
+<h2>2. A ferramenta <code>go</code></h2>
+<p>Tudo em Go passa por um único programa, o <code>go</code>. Ele compila, roda, testa, formata e baixa dependências. Os subcomandos que você mais vai usar neste guia:</p>
+<div class="table-wrap"><table class="ref">
+<tr><th>Comando</th><th>Para que serve</th><th>Aula</th></tr>
+<tr><td><code>go version</code></td><td>Mostra a versão instalada.</td><td><a href="instalar-e-versao.html">Instalação</a></td></tr>
+<tr><td><code>go run</code></td><td>Compila e roda na hora, sem deixar arquivo.</td><td><a href="go-run-vs-build.html">go run e go build</a></td></tr>
+<tr><td><code>go build</code></td><td>Compila e deixa o executável na pasta.</td><td><a href="go-run-vs-build.html">go run e go build</a></td></tr>
+<tr><td><code>go mod init</code></td><td>Cria um módulo (o “projeto”).</td><td><a href="go-mod-init.html">Módulos</a></td></tr>
+<tr><td><code>go test</code></td><td>Roda os testes automáticos.</td><td><a href="go-test.html">Testes</a></td></tr>
+<tr><td><code>gofmt</code> / <code>go vet</code></td><td>Formata o código e procura erros comuns.</td><td><a href="vet-e-gofmt.html">go vet e gofmt</a></td></tr>
+</table></div>
+<p>Rodar <code>go</code> sozinho mostra a lista de subcomandos. Este é o começo da resposta:</p>
+<pre class="term" data-cwd="~/projetos/ola">$ go help | head -n 12
+Go is a tool for managing Go source code.
+
+Usage:
+
+	go &lt;command&gt; [arguments]
+
+The commands are:
+
+	bug         start a bug report
+	build       compile packages and dependencies
+	clean       remove object files and cached files
+	doc         show documentation for package or symbol</pre>
+<hr>
+<h2>3. Por que aprender Go</h2>
+<ul>
+<li><strong>Simples.</strong> A linguagem tem poucas palavras-chave (25) e um jeito só de formatar o código (o <code>gofmt</code>).</li>
+<li><strong>Rápida.</strong> Compila em segundos e gera um executável único, fácil de copiar para um servidor.</li>
+<li><strong>Feita para servidores.</strong> Goroutines e channels (Nível 3) deixam fazer várias coisas ao mesmo tempo sem sofrimento.</li>
+<li><strong>Muito usada na nuvem.</strong> Docker, Kubernetes, Terraform e o próprio Hugo são escritos em Go.</li>
+</ul>
+<hr>
+<h2>4. Como este guia funciona</h2>
+<p>Cada aula traz o código, o comando e a <strong>saída real</strong>. No fim de cada aula há exercícios e caixas de <strong>Missão</strong>: você copia o código, salva num arquivo (quase sempre <code>main.go</code>), roda com <code>go run main.go</code> no terminal do seu computador e cola o que apareceu. A página confere a saída e o código e diz se a missão foi cumprida.</p>
+<div class="tip"><strong>Windows, macOS ou Linux?</strong><p>Tanto faz. As saídas deste guia foram colhidas num Linux, mas o código Go é o mesmo nos três sistemas. Muda só o jeito de abrir o terminal e, às vezes, o nome do executável (no Windows ele termina em <code>.exe</code>).</p></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>go run main.go</code></td><td>Compila e roda o arquivo na hora.</td></tr>
+<tr><td><code>go</code></td><td>Lista os subcomandos da ferramenta.</td></tr>
+<tr><td><code>go help build</code></td><td>Ajuda de um subcomando específico.</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="mc" data-answer="2"><p class="mc-q">1. O que quer dizer que Go é uma linguagem <strong>compilada</strong>?</p>
+<label><input type="radio" name="q1"> O código é lido linha por linha só na hora de rodar</label>
+<label><input type="radio" name="q1"> O código é conferido e transformado num executável antes de rodar</label>
+<label><input type="radio" name="q1"> O código só roda dentro do navegador</label>
+<label><input type="radio" name="q1"> O código precisa ser traduzido para Python</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">2. Qual programa compila, roda e testa código Go?</p>
+<label><input type="radio" name="q2"> <code>golang.exe</code> só</label>
+<label><input type="radio" name="q2"> A ferramenta <code>go</code></label>
+<label><input type="radio" name="q2"> O <code>gcc</code></label>
+<label><input type="radio" name="q2"> O <code>npm</code></label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. Em que momento o Go avisa que você usou uma variável que não existe?</p>
+<label><input type="radio" name="q3"> Só quando a linha roda</label>
+<label><input type="radio" name="q3"> Na compilação, antes de o programa rodar</label>
+<label><input type="radio" name="q3"> Nunca</label>
+<label><input type="radio" name="q3"> Só no <code>go test</code></label></div>
+
+<div class="trycmd" data-goal="src:fmt\.Println\(&quot;Olá, Go!&quot;\);;out:Olá, Go!;;semerro">
+<p class="try-task"><strong>Missão:</strong> rode o seu primeiro programa Go. Troque o texto para <code>Olá, Go!</code> e rode com <code>go run main.go</code>.</p>
+<pre class="script" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Olá, mundo!")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Olá, Go!")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Olá, Go!
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li>Go é compilada: o código vira um executável antes de rodar, e muitos erros aparecem já aí.</li>
+<li>A ferramenta <code>go</code> faz tudo: <code>run</code>, <code>build</code>, <code>mod</code>, <code>test</code>.</li>
+<li>No guia, você roda o código no seu computador e cola a saída para conferir.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

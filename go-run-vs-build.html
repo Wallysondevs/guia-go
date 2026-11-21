@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>go run e go build — rodar na hora ou gerar o executável | Guia Go</title>
+<meta name="description" content="A diferença entre go run e go build em Go: compilar e rodar na hora, ou gerar um executável com go build -o.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+</head>
+<body>
+<div class="layout">
+<nav class="sidebar" id="sidebar" aria-label="Tópicos"></nav>
+<main class="main">
+<div class="content">
+
+<div class="pager"></div>
+
+<h1><span class="hl">go run</span> e <span class="hl">go build</span></h1>
+
+<p class="intro">O <code>go run</code> compila e roda na hora, sem deixar nada na pasta. O <code>go build</code> compila e <strong>deixa o executável</strong>, que você pode rodar quantas vezes quiser e até copiar para outro computador com o mesmo sistema.</p>
+
+<div class="note"><strong>Você vai aprender</strong><ul><li>Usar <code>go run</code> no dia a dia e <code>go build</code> para gerar o programa final.</li><li>Escolher o nome do executável com <code>go build -o</code>.</li><li>Ver que o executável roda sozinho, sem o Go.</li></ul></div>
+
+<div class="note"><strong>Sobre as saídas.</strong> Todas as saídas desta aula foram colhidas rodando o código de verdade, com Go 1.27.3 num Linux (<code>linux/amd64</code>), na pasta <code>~/projetos</code> da usuária fictícia <code>ana</code>, no computador <code>notebook</code>. As mensagens de erro do Go aparecem em inglês, exatamente como a ferramenta escreveu: nunca traduzimos nem inventamos saída. A explicação em português vem ao lado.</div>
+
+<hr>
+<h2>1. <code>go run</code>: compila, roda e joga fora</h2>
+<p>Com o <code>go run</code>, o Go compila numa pasta temporária, roda e apaga. A pasta continua só com o código:</p>
+<pre class="file" data-file="main.go">package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Olá, mundo!")
+}</pre>
+<pre class="term" data-cwd="~/projetos/saudacao">$ ls
+main.go
+$ go run main.go
+Olá, mundo!
+$ ls
+main.go</pre>
+<hr>
+<h2>2. <code>go build</code>: deixa o executável</h2>
+<p>O <code>go build</code> não mostra nada quando dá certo: ele é silencioso. Mas, depois dele, aparece um arquivo novo, o executável, com o nome do arquivo sem o <code>.go</code>. No Linux e no macOS você roda com <code>./</code> na frente; no Windows ele se chama <code>main.exe</code>:</p>
+<pre class="term" data-cwd="~/projetos/saudacao">$ go build main.go
+$ ls
+main
+main.go
+$ ./main
+Olá, mundo!
+$ du -h main | cut -f1
+2.3M</pre>
+<p>O executável tem alguns megabytes porque leva junto tudo de que precisa, inclusive o <em>runtime</em> do Go. Por isso ele roda num computador sem o Go instalado.</p>
+<hr>
+<h2>3. Escolhendo o nome com <code>-o</code></h2>
+<p>O <code>-o</code> (de <em>output</em>, saída) dá o nome do arquivo gerado:</p>
+<pre class="term" data-cwd="~/projetos/saudacao">$ go build -o saudacao main.go
+$ ./saudacao
+Olá, mundo!</pre>
+<dl class="anatomy"><dt>go build</dt><dd>compila.</dd><dt>-o saudacao</dt><dd>grava o executável com o nome <code>saudacao</code>.</dd><dt>main.go</dt><dd>o arquivo a compilar.</dd></dl>
+<hr>
+<h2>4. Qual usar?</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Situação</th><th>Use</th></tr>
+<tr><td>Testar uma mudança rápida</td><td><code>go run main.go</code></td></tr>
+<tr><td>Entregar o programa para alguém</td><td><code>go build -o nome</code></td></tr>
+<tr><td>Rodar o mesmo programa muitas vezes</td><td><code>go build</code> uma vez e depois <code>./nome</code></td></tr>
+</table></div>
+
+<hr>
+<h2 id="errado">Quando dá errado</h2>
+<div class="cenario"><strong>O arquivo não existe</strong>
+<p>Rodar <code>go run main.go</code> numa pasta sem esse arquivo (aqui, a pasta <code>vazio</code>):</p>
+<pre class="term" data-cwd="~/projetos/vazio">$ go run main.go
+stat main.go: no such file or directory</pre>
+<p>Confira com <code>ls</code> (ou <code>dir</code>, no Windows) se você está na pasta certa.</p></div>
+<div class="cenario"><strong>Esqueceu o <code>./</code></strong>
+<p>No Linux e no macOS, o terminal não procura programas na pasta atual. Sem o <code>./</code>, ele não acha o executável recém-criado:</p>
+<pre class="term" data-cwd="~/projetos/saudacao">$ saudacao
+bash: line 1: saudacao: command not found</pre></div>
+
+<hr>
+<h2>Referência rápida</h2>
+<div class="table-wrap"><table class="ref">
+<tr><th>Você escreve</th><th>O que faz</th></tr>
+<tr><td><code>go run main.go</code></td><td>Compila e roda, sem deixar arquivo.</td></tr>
+<tr><td><code>go build main.go</code></td><td>Gera o executável <code>main</code> (<code>main.exe</code> no Windows).</td></tr>
+<tr><td><code>go build -o nome main.go</code></td><td>Gera o executável com o nome escolhido.</td></tr>
+<tr><td><code>./nome</code></td><td>Roda o executável da pasta atual (Linux/macOS).</td></tr>
+</table></div>
+
+<hr>
+<h2>Exercícios</h2>
+
+<div class="exercise"><h3>1. Rodar na hora</h3><p>Complete para compilar e rodar sem deixar arquivo:</p><div class="ex-code">go <input data-answer="run" aria-label="resposta"> main.go</div></div>
+
+<div class="exercise"><h3>2. Dar nome</h3><p>Complete para gerar o executável <code>app</code>:</p><div class="ex-code">go build <input data-answer="-o" aria-label="resposta"> app main.go</div></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">3. O que o <code>go build</code> mostra quando dá certo?</p>
+<label><input type="radio" name="q3"> Uma mensagem de sucesso</label>
+<label><input type="radio" name="q3"> Nada: ele é silencioso, e o executável aparece na pasta</label>
+<label><input type="radio" name="q3"> O código-fonte</label>
+<label><input type="radio" name="q3"> A versão do Go</label></div>
+
+<div class="mc" data-answer="2"><p class="mc-q">4. Por que o executável do Go roda num computador sem o Go instalado?</p>
+<label><input type="radio" name="q4"> Porque ele baixa o Go na hora</label>
+<label><input type="radio" name="q4"> Porque leva junto tudo de que precisa, inclusive o runtime</label>
+<label><input type="radio" name="q4"> Porque é um script</label>
+<label><input type="radio" name="q4"> Ele não roda</label></div>
+
+<div class="trycmd" data-goal="src:&quot;Executável pronto!&quot;;;out:Executável pronto!;;semerro">
+<p class="try-task"><strong>Missão:</strong> gere um executável chamado <code>ola</code> com <code>go build -o ola</code> e rode com <code>./ola</code>. O programa deve escrever <code>Executável pronto!</code>. Cole a saída do <code>./ola</code>.</p>
+<pre class="script" data-file="main.go" data-cmd="go build -o ola main.go &amp;&amp; ./ola">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Olá, mundo!")
+}
+</pre>
+<pre class="solucao" data-file="main.go">
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Executável pronto!")
+}
+</pre>
+<pre class="saida-ok" data-file="main.go" hidden>
+Executável pronto!
+</pre>
+</div>
+
+<hr>
+<h2>Resumo</h2>
+<ul>
+<li><code>go run</code> compila e roda na hora; <code>go build</code> deixa o executável.</li>
+<li>O <code>go build</code> é silencioso quando dá certo.</li>
+<li><code>-o</code> escolhe o nome; no Linux/macOS, rode com <code>./</code>.</li>
+</ul>
+
+<div class="pager"></div>
+
+</div>
+</main>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
