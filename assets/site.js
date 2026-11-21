@@ -68,11 +68,11 @@ var NIVEIS = [
   ]},
   { id: "n3", nome: "Nível 3 · Avançado", curto: "Avançado", desc: "Concorrência, rede e ferramentas", grupos: [
     { grupo: "Concorrência", itens: [
-      ["goroutines.html", "Goroutines"],
-      ["channels.html", "Channels"],
-      ["select.html", "select"],
-      ["sync.html", "sync.WaitGroup e sync.Mutex"],
-      ["context.html", "context"]
+      ["goroutines.html", "Goroutines", { pronta: false }],
+      ["channels.html", "Channels", { pronta: false }],
+      ["select.html", "select", { pronta: false }],
+      ["sync.html", "sync.WaitGroup e sync.Mutex", { pronta: false }],
+      ["context.html", "context", { pronta: false }]
     ]},
     { grupo: "Rede e Ferramentas", itens: [
       ["http-servidor.html", "Servidor HTTP (net/http)", { pronta: false }],
